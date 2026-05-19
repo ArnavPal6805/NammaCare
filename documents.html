@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>NammaCare - Medical Documents</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="styles.css?v=20260516a" rel="stylesheet"/>
+</head>
+<body>
+<div class="ambient-glow glow-blue" style="top: 10%; right: -10%;"></div>
+<header class="navbar glass-dark" id="navbar">
+<div class="nav-container">
+<a class="brand" href="index.html">
+<img alt="Logo" class="brand-logo" src="logo.png" style="object-fit:cover; padding: 2px; background: white;"/>
+<span class="brand-text">Namma<span class="text-green">Care</span></span>
+</a>
+<nav class="nav-links" id="nav-links"></nav>
+<div class="nav-controls" id="nav-controls"></div>
+</div>
+</header>
+<main>
+<section class="main-container view active slide-up" id="documents-view">
+<div class="page-header">
+<div>
+<h1 class="page-title text-white">Medical <span class="text-blue">Records</span></h1>
+<p class="page-subtitle">Upload and access prescriptions, reports, and history.</p>
+</div>
+</div>
+<div class="alert-error hidden" id="help-success-alert" style="border-color: var(--c-blue); background: rgba(0,213,255,0.1);">
+<h3 class="text-blue mb-0">Document Uploaded Successfully</h3>
+</div>
+<div>
+<!-- Upload Form -->
+<div class="glass-panel">
+<h2 class="text-white font-bold text-2xl mb-4">Upload Document</h2>
+<form id="doc-form">
+<div class="form-group">
+<label>Document Title / Name</label>
+<input class="input-field" id="doc-title" required="" type="text"/>
+</div>
+<div class="form-group">
+<label>Category</label>
+<select class="input-field" id="doc-cat" required="">
+<option value="Prescription">Prescription</option>
+<option value="Lab Report">Lab Report</option>
+<option value="Discharge Summary">Discharge Summary</option>
+<option value="Other">Other</option>
+</select>
+</div>
+<div class="form-group">
+<label>File (Simulation)</label>
+<input class="input-field" id="doc-file" required="" type="file"/>
+</div>
+<button class="btn btn-primary w-full" style="background: var(--c-blue); color: black;" type="submit">Store Securely</button>
+</form>
+</div>
+<!-- Documents List -->
+<div>
+<h2 class="text-white font-bold text-2xl mb-4">Stored Vault</h2>
+<div id="doc-list">
+<!-- Populated by JS -->
+</div>
+</div>
+</div>
+</section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="app.js?v=20260516a"></script>
+</body>
+</html>

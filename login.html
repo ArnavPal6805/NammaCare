@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>NammaCare - Senior Guardian System</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#00D2FF">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- Modern Typography: Space Grotesk represents premium futuristic UI -->
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="styles.css?v=20260516a" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<!-- Ambient glowing backgrounds spanning viewport -->
+<div class="ambient-glow glow-blue"></div>
+<div class="ambient-glow glow-pink"></div>
+<div class="ambient-glow glow-green"></div>
+<!-- Navigation Bar -->
+<header class="navbar glass-dark" id="navbar">
+<div class="nav-container">
+<a class="brand" href="index.html">
+<img alt="Logo" class="brand-logo" src="logo.png" style="object-fit:cover; padding: 2px; background: white;"/>
+<span class="brand-text">Namma<span class="text-green">Care</span></span>
+</a>
+<nav class="nav-links" id="nav-links">
+<!-- Dynamically injected links based on auth role -->
+</nav>
+<div class="nav-controls" id="nav-controls">
+<!-- Auth button / User profile -->
+</div>
+</div>
+</header>
+<main>
+    <!-- LOGIN VIEW -->
+    <section class="main-container view active" id="login-view">
+      <div class="auth-box">
+        <div class="auth-header">
+          <h1>Welcome Back</h1>
+          <p>Sign in to access your NammaCare dashboard.</p>
+        </div>
+        
+        <form id="login-form" onsubmit="app.handleAuth(event, 'login')">
+          <div class="form-group">
+            <label>Username or Phone</label>
+            <input type="text" id="login-userid" class="input-field" placeholder="Email or Phone Number" required>
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="login-password" class="input-field" placeholder="••••••••" required>
+          </div>
+          <button type="submit" class="btn btn-primary w-full mt-4 shadow-glow">Sign In</button>
+        </form>
+
+        <div class="auth-divider"><span>OR</span></div>
+        <button class="btn btn-outline w-full" onclick="app.signInWithGoogle()" type="button" style="display:flex;align-items:center;justify-content:center;gap:0.5rem;">
+          <img src="https://www.svgrepo.com/show/355037/google.svg" alt="Google" style="width:20px;height:20px;"/>
+          <span>Sign in with Google</span>
+        </button>
+
+        <p class="auth-switch">
+          New to NammaCare? <button class="btn-text text-green" onclick="app.toggleAuthMode('register')">Register Here</button>
+        </p>
+      </div>
+    </section>
+
+    <!-- REGISTER VIEW -->
+    <section class="main-container view" id="register-view" style="display:none;">
+      <div class="auth-box" style="max-width: 500px;">
+        <div class="auth-header">
+          <h1>Join NammaCare</h1>
+          <p id="reg-subtitle">Please enter your basic information first.</p>
+        </div>
+        
+        <form id="register-form" onsubmit="app.handleAuth(event, 'register')">
+          <div class="form-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+              <label>Full Name</label>
+              <input type="text" id="reg-name" class="input-field" placeholder="Full Name" required>
+            </div>
+            <div class="form-group">
+              <label>Username</label>
+              <input type="text" id="reg-username" class="input-field" placeholder="Choose Username" required>
+            </div>
+            <div class="form-group">
+              <label>Phone Number</label>
+              <input type="text" id="reg-phone" class="input-field" placeholder="+91..." required>
+            </div>
+            <div class="form-group">
+              <label>Email Address</label>
+              <input type="email" id="reg-userid" class="input-field" placeholder="Optional for Google" required>
+            </div>
+            <div class="form-group">
+              <label>Create Password</label>
+              <input type="password" id="reg-password" class="input-field" placeholder="••••••••" required>
+            </div>
+            <div class="form-group">
+              <label>Date of Birth</label>
+              <input type="date" id="reg-dob" class="input-field" required>
+            </div>
+            <div class="form-group">
+              <label>Select Role</label>
+              <select id="reg-role" class="input-field" style="background: var(--bg-card);" onchange="document.getElementById('caretaker-code-group').style.display = this.value === 'Senior Citizen' ? 'block' : 'none'">
+                <option value="Senior Citizen">Senior Citizen</option>
+                <option value="Caretaker">Caretaker</option>
+                <option value="Volunteer">Volunteer</option>
+                <option value="Doctor">Doctor</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Shown only when role = Senior Citizen -->
+          <div class="form-group mt-4" id="caretaker-code-group">
+            <label>Caretaker Family Code <span class="text-muted">(Optional)</span></label>
+            <input type="text" id="reg-family-link" class="input-field" placeholder="e.g. NC-4829">
+            <p class="text-xs text-muted mt-1">If your caretaker gave you a link code, enter it here to link accounts.</p>
+            <div style="display:flex; align-items:center; gap:0.6rem; margin-top:0.75rem;">
+              <input type="checkbox" id="no-caretaker-checkbox" style="width:1.1rem;height:1.1rem;cursor:pointer;">
+              <label for="no-caretaker-checkbox" style="font-size:0.85rem; color:var(--text-muted); cursor:pointer; margin:0;">
+                I don't have a caretaker — assign me a community caretaker
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group mt-4">
+            <label>Residential Address</label>
+            <textarea id="reg-address" class="input-field" placeholder="Enter Address" style="min-height: 80px;"></textarea>
+          </div>
+
+          <div class="auth-divider mt-6"><span>CHOOSE ACCOUNT TYPE</span></div>
+
+          <div style="display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem;">
+            <button class="btn btn-outline w-full" onclick="app.registerMode='google'" type="submit" style="display:flex;align-items:center;justify-content:center;gap:0.75rem; padding: 1.5rem;">
+              <img src="https://www.svgrepo.com/show/355037/google.svg" alt="Google" style="width:24px;height:24px;"/>
+              <div style="text-align: left;">
+                <div class="font-bold">Link with Google</div>
+                <div class="text-xs text-muted">Faster sign-in next time.</div>
+              </div>
+            </button>
+
+            <button class="btn btn-primary w-full" onclick="app.registerMode='email'" type="submit" style="display:flex;align-items:center;justify-content:center;gap:0.75rem; padding: 1.5rem;">
+              <div class="font-bold" style="font-size: 1.5rem;">📧</div>
+              <div style="text-align: left;">
+                <div class="font-bold">Use Email & Password</div>
+                <div class="text-xs text-muted">Standard account creation.</div>
+              </div>
+            </button>
+          </div>
+        </form>
+
+        <p class="auth-switch mt-8">
+          Already have an account? <button class="btn-text text-green" onclick="app.toggleAuthMode('login')">Login Here</button>
+        </p>
+      </div>
+    </section>
+  </main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="app.js?v=20260516a"></script>
+</body>
+</html>

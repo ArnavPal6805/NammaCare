@@ -1,0 +1,33 @@
+Sprint-3: Health Monitoring + Daily Check-in + Document Storage
+
+1) Manage the advanced functions
+✅ Health Tracking Management
+✅ Daily Check-in System
+✅ Document Upload Management
+✅ Volunteer Reward System
+✅ Admin Dashboard & Verification
+
+2) Upon clicking Health Monitoring Button
+✅ allow senior/caretaker to enter health readings. Eg - BP, Sugar, etc.
+✅ store logs date-wise
+✅ display graphs/trends for caretaker
+✅ if value crosses threshold, generate alert to caretaker
+
+3) Daily Check-in Feature
+✅ show daily check-in button to senior
+✅ Seniors must click check-in once daily
+✅ if not checked in within a time window, trigger alert to caretaker
+✅ caretaker can acknowledge alert and contact senior
+
+4) Medical Document Storage Module
+✅ allow uploading documents. Eg – prescriptions, lab reports, etc.
+✅ allow viewing and downloading documents anytime
+✅ categorize documents for easier access
+
+5) Admin Management Dashboard
+✅ admin can approve/reject volunteer registrations
+✅ admin can view SOS statistics
+✅ admin can view help request analytics
+✅ admin can block suspicious accounts
+
+Sprint-3 Output: Complete product with health tracking, safety check-in, documents, volunteer rewards, admin analytics.

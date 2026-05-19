@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>NammaCare - Senior Guardian System</title>
+<!-- Modern Typography: Space Grotesk represents premium futuristic UI -->
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="styles.css?v=20260516a" rel="stylesheet"/>
+</head>
+<body>
+<!-- Ambient glowing backgrounds spanning viewport -->
+<div class="ambient-glow glow-blue"></div>
+<div class="ambient-glow glow-pink"></div>
+<div class="ambient-glow glow-green"></div>
+<!-- Navigation Bar -->
+<header class="navbar glass-dark" id="navbar">
+<div class="nav-container">
+<a class="brand" href="index.html">
+<img alt="Logo" class="brand-logo" src="logo.png" style="object-fit:cover; padding: 2px; background: white;"/>
+<span class="brand-text">Namma<span class="text-green">Care</span></span>
+</a>
+<nav class="nav-links" id="nav-links">
+<!-- Dynamically injected links based on auth role -->
+</nav>
+<div class="nav-controls" id="nav-controls">
+<!-- Auth button / User profile -->
+</div>
+</div>
+</header>
+<main>
+<section class="main-container view active" id="volunteer-view">
+<div class="page-header slide-up items-end">
+<div>
+<p class="text-green font-black uppercase tracking-wider text-xs mb-2">Volunteer Command Center</p>
+<h1 class="page-title leading-tight">NammaCare Tasks</h1>
+<p class="page-subtitle max-w-lg mt-2">Respond to local needs across Bangalore with surgical precision.</p>
+</div>
+<div class="stat-box hidden-mobile">
+<p class="label">Weekly Impact</p>
+<p class="value text-green"><span id="vol-points">0</span> XP <span class="text-muted text-sm px-2">Top 5%</span></p>
+</div>
+</div>
+<div class="volunteer-grid slide-up delay-1">
+<div class="glass-panel">
+<div class="panel-header">
+<h3 class="text-2xl text-white font-bold">Awaiting Response</h3>
+<span class="badge badge-pink" id="vol-pending-count">0</span>
+</div>
+<div class="task-list" id="vol-pending-tasks"></div>
+</div>
+<div class="glass-panel">
+<div class="panel-header">
+<h3 class="text-2xl text-white font-bold">Active Queue</h3>
+<span class="badge badge-green" id="vol-active-count">0</span>
+</div>
+<div class="task-list" id="vol-active-tasks"></div>
+</div>
+</div>
+</section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="app.js?v=20260516a"></script>
+</body>
+</html>

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>NammaCare - Medicine Reminders</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="styles.css?v=20260516a" rel="stylesheet"/>
+</head>
+<body>
+<div class="ambient-glow glow-blue"></div>
+<div class="ambient-glow glow-green" style="top: 20%; left: 60%;"></div>
+<!-- Navigation Bar -->
+<header class="navbar glass-dark" id="navbar">
+<div class="nav-container">
+<a class="brand" href="index.html">
+<img alt="Logo" class="brand-logo" src="logo.png" style="object-fit:cover; padding: 2px; background: white;"/>
+<span class="brand-text">Namma<span class="text-green">Care</span></span>
+</a>
+<nav class="nav-links" id="nav-links"></nav>
+<div class="nav-controls" id="nav-controls"></div>
+</div>
+</header>
+<main>
+<section class="main-container view active slide-up" id="medicine-view">
+<div class="page-header">
+<div>
+<h1 class="page-title text-white">Medication <span class="text-green">Grid</span></h1>
+<p class="page-subtitle">Track and configure vital prescriptions</p>
+</div>
+</div>
+<div class="alert-error hidden" id="help-success-alert" style="border-color: var(--c-green); background: rgba(0,255,157,0.1);">
+<h3 class="text-green mb-0">System Updated Successfully</h3>
+</div>
+<div>
+<!-- Add Medication Form -->
+<div class="glass-panel">
+<h2 class="text-white font-bold text-2xl mb-4">Add Regimen</h2>
+<form id="med-form">
+<div class="form-group">
+<label>Medicine Name</label>
+<input class="input-field" id="med-name" placeholder="e.g. Amlodipine" required="" type="text"/>
+</div>
+<div class="form-group">
+<label>Dosage</label>
+<input class="input-field" id="med-dosage" placeholder="e.g. 50mg / 1 Tablet" required="" type="text"/>
+</div>
+<div class="form-group" style="display: flex; gap: 1rem;">
+<div style="flex:1;">
+<label>Frequency</label>
+<select class="input-field" id="med-freq" required="">
+<option value="Daily">Daily</option>
+<option value="Weekly">Weekly</option>
+</select>
+</div>
+<div style="flex:1;">
+<label>Time (HH:MM)</label>
+<input class="input-field" id="med-time" required="" type="time"/>
+</div>
+</div>
+<button class="btn btn-primary w-full" style="background: linear-gradient(45deg, var(--c-green), #00b36e); box-shadow: 0 0 20px rgba(0,255,157,0.3);" type="submit">Register Medication</button>
+</form>
+</div>
+<!-- Upcoming Doses List -->
+<div>
+<h2 class="text-white font-bold text-2xl mb-4">Upcoming Doses</h2>
+<div id="med-list">
+<!-- Rendered by app.js -->
+</div>
+</div>
+</div>
+</section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="app.js?v=20260516a"></script>
+</body>
+</html>

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>NammaCare - Senior Guardian System</title>
+<!-- Modern Typography: Space Grotesk represents premium futuristic UI -->
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="styles.css?v=20260516a" rel="stylesheet"/>
+</head>
+<body>
+<!-- Ambient glowing backgrounds spanning viewport -->
+<div class="ambient-glow glow-blue"></div>
+<div class="ambient-glow glow-pink"></div>
+<div class="ambient-glow glow-green"></div>
+<!-- Navigation Bar -->
+<header class="navbar glass-dark" id="navbar">
+<div class="nav-container">
+<a class="brand" href="index.html">
+<img alt="Logo" class="brand-logo" src="logo.png" style="object-fit:cover; padding: 2px; background: white;"/>
+<span class="brand-text">Namma<span class="text-green">Care</span></span>
+</a>
+<nav class="nav-links" id="nav-links">
+<!-- Dynamically injected links based on auth role -->
+</nav>
+<div class="nav-controls" id="nav-controls">
+<!-- Auth button / User profile -->
+</div>
+</div>
+</header>
+<main>
+<section class="main-container view active" id="profile-view">
+
+<!-- ★ SENIOR QUICK ACTIONS ★ -->
+<div class="slide-up mb-6" style="display:flex; gap:1rem; flex-wrap:wrap; align-items:center; justify-content:center;">
+  <button id="sos-button" class="btn" style="background: linear-gradient(135deg,#ff003c,#ff6b6b); color:#fff; font-size:1.25rem; font-weight:900; padding:1rem 2.5rem; border-radius:999px; box-shadow:0 0 30px rgba(255,0,60,0.5); letter-spacing:0.05em;">
+    🚨 Emergency SOS
+  </button>
+  <button class="btn btn-outline border-blue text-blue" onclick="window.location.href='help-request.html'">📋 Raise Help Request</button>
+  <button class="btn btn-outline border-green text-green" onclick="window.location.href='medicine.html'">💊 Medication Reminders</button>
+  <button class="btn btn-outline text-white" onclick="window.location.href='appointments.html'">🏥 Doctor Appointments</button>
+</div>
+
+<div class="page-header slide-up">
+<div>
+<h1 class="page-title">Profile Command</h1>
+<p class="page-subtitle">Manage your personal details and emergency contacts securely.</p>
+</div>
+<button class="btn btn-outline" id="profile-edit-btn" onclick="app.toggleProfileEdit()">Edit Information</button>
+</div>
+<div class="alert-warning hidden slide-up" id="profile-verification-alert" style="background: rgba(0,255,100,0.1); border-color: var(--c-green); color: var(--text-green);">
+<span class="emoji-icon" style="filter: hue-rotate(200deg);">✅</span>
+<p>Profile information safely saved.</p>
+</div>
+<div class="glass-panel profile-grid slide-up delay-1">
+<div class="form-group">
+<label class="text-blue">Full Name</label>
+<input class="input-field font-bold text-lg" disabled="" id="prof-name" type="text" value=""/>
+</div>
+<div class="form-group">
+<label class="text-blue">Date of Birth</label>
+<input class="input-field font-bold text-lg" disabled="" id="prof-dob" type="date" value=""/>
+</div>
+<div class="form-group span-2">
+<label class="text-blue">Residential Address (Bangalore)</label>
+<textarea class="input-field font-bold text-md h-24" disabled="" id="prof-address"></textarea>
+</div>
+<div class="form-group">
+<label class="text-blue">Phone Number</label>
+<input class="input-field font-bold text-xl" disabled="" id="prof-phone" type="text" value=""/>
+</div>
+<div class="form-group">
+<label class="text-pink">Emergency Contact</label>
+<input class="input-field font-bold text-xl bg-pink-dim border-pink" disabled="" id="prof-emergency" type="text" value=""/>
+</div>
+</div>
+</section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="app.js?v=20260516a"></script>
+</body>
+</html>

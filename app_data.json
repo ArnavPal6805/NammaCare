@@ -1,0 +1,33 @@
+{
+  "users": [],
+  "requests": [],
+  "sosHistory": [],
+  "activeSOS": [],
+  "medications": [],
+  "medicationLogs": [],
+  "appointments": [],
+  "contacts": [],
+  "notifications": [
+    {
+      "id": "notif-1779022698941",
+      "message": "URGENT: Patient has not checked in today!",
+      "forUser": null,
+      "forRole": "Caretaker",
+      "time": "6:28:18 PM",
+      "read": false
+    },
+    {
+      "id": "notif-1779022698943",
+      "message": "Please click \"I am Safe\" in Health Dashboard!",
+      "forUser": "ae300fff-4e8b-4455-b1fb-e5970eefe9aa",
+      "forRole": null,
+      "time": "6:28:18 PM",
+      "read": false
+    }
+  ],
+  "healthLogs": [],
+  "checkIns": [],
+  "documents": [],
+  "rewards": [],
+  "volunteerXP": {}
+}

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>NammaCare - Admin Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="styles.css?v=20260516a" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<div class="ambient-glow glow-pink" style="top: 10%; right: -10%;"></div>
+<div class="ambient-glow glow-blue" style="bottom: 10%; left: -10%;"></div>
+<header class="navbar glass-dark" id="navbar">
+<div class="nav-container">
+<a class="brand" href="index.html">
+<img alt="Logo" class="brand-logo" src="logo.png" style="object-fit:cover; padding: 2px; background: white;"/>
+<span class="brand-text">Namma<span class="text-green">Care</span></span>
+</a>
+<nav class="nav-links" id="nav-links"></nav>
+<div class="nav-controls" id="nav-controls"></div>
+</div>
+</header>
+<main>
+<section class="main-container view active slide-up" id="admin-view">
+<div class="page-header">
+<div>
+<h1 class="page-title text-white">System <span class="text-pink">Administration</span></h1>
+<p class="page-subtitle">Central oversight for networks, analytics, and security.</p>
+</div>
+</div>
+<!-- Top Level Stats -->
+<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem;">
+<div class="glass-panel text-center">
+<h3 class="text-muted text-sm uppercase font-bold">Total SOS</h3>
+<p class="text-pink text-4xl font-black mt-2" id="stat-sos">0</p>
+</div>
+<div class="glass-panel text-center">
+<h3 class="text-muted text-sm uppercase font-bold">Help Requests</h3>
+<p class="text-blue text-4xl font-black mt-2" id="stat-reqs">0</p>
+</div>
+<div class="glass-panel text-center">
+<h3 class="text-muted text-sm uppercase font-bold">Volunteers</h3>
+<p class="text-green text-4xl font-black mt-2" id="stat-vols">0</p>
+</div>
+<div class="glass-panel text-center">
+<h3 class="text-muted text-sm uppercase font-bold">Health Alerts</h3>
+<p class="text-yellow text-4xl font-black mt-2" id="stat-alerts">0</p>
+</div>
+</div>
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 2rem;">
+<!-- Approvals & User Management -->
+<div class="glass-panel">
+<h2 class="text-white font-bold text-2xl mb-4">User Management &amp; Approvals</h2>
+<div id="admin-users-list">
+<!-- Populated by JS -->
+</div>
+</div>
+<!-- Analytics Chart -->
+<div class="glass-panel">
+<h2 class="text-white font-bold text-2xl mb-4">Request Analytics</h2>
+<div style="height: 250px; width: 100%;">
+<canvas id="analyticsChart"></canvas>
+</div>
+</div>
+</div>
+</section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="app.js?v=20260516a"></script>
+</body>
+</html>

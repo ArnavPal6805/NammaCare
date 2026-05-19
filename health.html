@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>NammaCare - Health &amp; Safety</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="styles.css?v=20260516a" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<div class="ambient-glow glow-green" style="top: -10%; left: -10%;"></div>
+<header class="navbar glass-dark" id="navbar">
+<div class="nav-container">
+<a class="brand" href="index.html">
+<img alt="Logo" class="brand-logo" src="logo.png" style="object-fit:cover; padding: 2px; background: white;"/>
+<span class="brand-text">Namma<span class="text-green">Care</span></span>
+</a>
+<nav class="nav-links" id="nav-links"></nav>
+<div class="nav-controls" id="nav-controls"></div>
+</div>
+</header>
+<main>
+<section class="main-container view active slide-up" id="health-view">
+<div class="page-header">
+<div>
+<h1 class="page-title text-white">Health <span class="text-yellow">Monitoring</span></h1>
+<p class="page-subtitle">Track vitals and confirm daily safety check-ins.</p>
+</div>
+</div>
+<div class="alert-error hidden" id="help-success-alert" style="border-color: var(--c-green); background: rgba(0,255,170,0.1);">
+<h3 class="text-green mb-0">Updated Successfully</h3>
+</div>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+<!-- Daily Check-In (Senior Side) -->
+<div class="glass-panel" id="senior-checkin-panel" style="text-align: center;">
+<h2 class="text-white font-bold text-2xl mb-4">Daily Check-In</h2>
+<p class="text-muted mb-4">Please check in once a day to confirm you are safe.</p>
+<button class="btn btn-primary" id="btn-checkin" onclick="app.logCheckIn()" style="padding: 1rem 3rem; background: var(--c-green); color: black;">I am Safe (Check-In)</button>
+<p class="mt-4 text-green font-bold hidden" id="checkin-status">You have checked in today. Thank you!</p>
+</div>
+<!-- Log Vitals Form -->
+<div class="glass-panel">
+<h2 class="text-white font-bold text-2xl mb-4">Log Vitals</h2>
+<form id="health-form">
+<div class="form-group">
+<label>Blood Pressure (e.g. 120/80)</label>
+<input class="input-field" id="health-bp" required="" type="text"/>
+</div>
+<div class="form-group">
+<label>Blood Sugar (mg/dL)</label>
+<input class="input-field" id="health-sugar" required="" type="number"/>
+</div>
+<button class="btn btn-primary w-full" type="submit">Save Reading</button>
+</form>
+</div>
+<!-- Caretaker Trend Graph -->
+<div class="glass-panel span-2" id="caretaker-trends-panel">
+<h2 class="text-white font-bold text-2xl mb-4">Health Trends Overview</h2>
+<div style="height: 300px; width: 100%;">
+<canvas id="healthChart"></canvas>
+</div>
+</div>
+</div>
+</section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="app.js?v=20260516a"></script>
+</body>
+</html>

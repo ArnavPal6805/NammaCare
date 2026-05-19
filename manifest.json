@@ -1,0 +1,24 @@
+{
+  "name": "NammaCare Elder Support Grid",
+  "short_name": "NammaCare",
+  "description": "Community-driven rapid assistance and emergency SOS grid for senior citizens in Bangalore.",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#0B0F19",
+  "theme_color": "#00D2FF",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://ui-avatars.com/api/?name=NC&background=00D2FF&color=ffffff&size=192",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://ui-avatars.com/api/?name=NammaCare&background=00D2FF&color=ffffff&size=512",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

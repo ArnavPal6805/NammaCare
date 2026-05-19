@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>NammaCare - Senior Guardian System</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#00D2FF">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- Modern Typography: Space Grotesk represents premium futuristic UI -->
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="styles.css?v=20260516a" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<!-- Ambient glowing backgrounds spanning viewport -->
+<div class="ambient-glow glow-blue"></div>
+<div class="ambient-glow glow-pink"></div>
+<div class="ambient-glow glow-green"></div>
+<!-- Navigation Bar -->
+<header class="navbar glass-dark" id="navbar">
+<div class="nav-container">
+<a class="brand" href="index.html">
+<img alt="Logo" class="brand-logo" src="logo.png" style="object-fit:cover; padding: 2px; background: white;"/>
+<span class="brand-text">Namma<span class="text-green">Care</span></span>
+</a>
+<nav class="nav-links" id="nav-links">
+<!-- Dynamically injected links based on auth role -->
+</nav>
+<div class="nav-controls" id="nav-controls">
+<!-- Auth button / User profile -->
+</div>
+</div>
+</header>
+<main style="justify-content: center; align-items: center; text-align: center; min-height: 80vh;">
+<!-- LANDING HERO VIEW -->
+<section class="main-container view active slide-up" id="home-view">
+<div style="max-width: 800px; margin: 0 auto; margin-top: 5rem;">
+<span class="badge badge-blue">Bangalore's #1 Dedicated Support Grid</span>
+<h1 class="font-black text-white" style="font-size: 5rem; letter-spacing: -2px; line-height: 1.1; margin-top: 1.5rem; margin-bottom: 2rem;">
+                    Empowering Seniors.<br/>
+<span style="background: linear-gradient(to right, var(--c-blue), var(--c-green)); -webkit-background-clip: text; background-clip: text; color: transparent;">Connecting Responders.</span>
+</h1>
+<p class="text-muted" style="font-size: 1.5rem; margin-bottom: 3.5rem; line-height: 1.6;">
+                    The hyper-connected guardian network for elderly independence. Featuring instant SOS deployment, real-time medical task routing, and transparent caretaker observation.
+                </p>
+<div style="display: flex; gap: 1.5rem; justify-content: center; margin-bottom: 5rem;">
+<button class="btn btn-primary" onclick="window.location.href='login.html'" style="padding: 1.25rem 3rem; font-size: 1.25rem;">Secure Login</button>
+<button class="btn btn-outline" onclick="window.location.href='sos.html'" style="padding: 1.25rem 3rem; font-size: 1.25rem; border-color: var(--c-pink); color: var(--c-pink);">EMERGENCY SOS</button>
+</div>
+<!-- Features Grid -->
+<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; text-align: left;">
+<div class="glass-panel" onclick="window.location.href='login.html?role=Senior Citizen'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 0 15px var(--pink-glow)';" onmouseover="this.style.transform='translateY(-5px)'; this.style.boxShadow='0 0 30px var(--c-pink)';" style="padding: 2rem; cursor: pointer; transition: all 0.2s; border-color: var(--c-pink); box-shadow: 0 0 15px var(--pink-glow);">
+<h3 class="text-white font-bold text-xl mb-2">For Seniors</h3>
+<p class="text-muted text-sm">Raise help requests for groceries, official paperwork, or medical escorts instantly.</p>
+<button class="btn-text text-white mt-4 font-bold" style="font-size: 0.875rem;">Login as Senior →</button>
+</div>
+<div class="glass-panel" onclick="window.location.href='login.html?role=Volunteer'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 0 15px var(--green-glow)';" onmouseover="this.style.transform='translateY(-5px)'; this.style.boxShadow='0 0 30px var(--c-green)';" style="padding: 2rem; cursor: pointer; transition: all 0.2s; border-color: var(--c-green); box-shadow: 0 0 15px var(--green-glow);">
+<h3 class="text-green font-bold text-xl mb-2">For Volunteers</h3>
+<p class="text-muted text-sm">Join the localized rapid response unit. Earn XP by assisting verified requests nearby.</p>
+<button class="btn-text text-green mt-4 font-bold" style="font-size: 0.875rem;">Login as Volunteer →</button>
+</div>
+<div class="glass-panel" onclick="window.location.href='login.html?role=Caretaker'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 0 15px var(--blue-glow)';" onmouseover="this.style.transform='translateY(-5px)'; this.style.boxShadow='0 0 30px var(--c-blue)';" style="padding: 2rem; cursor: pointer; transition: all 0.2s; border-color: var(--c-blue); box-shadow: 0 0 15px var(--blue-glow);">
+<h3 class="text-blue font-bold text-xl mb-2">For Caretakers</h3>
+<p class="text-muted text-sm">Full command grid observing live GPS routing, medical history, and status tracking.</p>
+<button class="btn-text text-blue mt-4 font-bold" style="font-size: 0.875rem;">Login as Caretaker →</button>
+</div>
+</div>
+</div>
+</section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script src="app.js?v=20260516a"></script>
+</body>
+</html>
