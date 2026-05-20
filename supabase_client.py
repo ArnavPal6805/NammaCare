@@ -27,7 +27,7 @@ def _get_required_env_var(name: str) -> str:
 
 
 SUPABASE_URL = _get_required_env_var("SUPABASE_URL")
-SUPABASE_KEY = _get_required_env_var("SUPABASE_KEY")
+SUPABASE_KEY = _get_required_env_var("SUPABASE_SERVICE_ROLE_KEY")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 

@@ -10,7 +10,10 @@ import logging
 import os
 import random
 import string
+import smtplib
 from datetime import date
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from typing import Any, Dict, Optional
 from uuid import UUID, uuid4
 
@@ -19,7 +22,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict
-from twilio.rest import Client
+# from twilio.rest import Client  # Reverted for Phase 1
 
 from supabase_client import supabase
 
@@ -28,15 +31,16 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nammacare.backend")
 bearer_scheme = HTTPBearer()
 
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "AC5072477eb0401dcfd265bb47edfb9466")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "40709ea6bbf6e1f85dd0ddd76aef45b2")
-TWILIO_FROM_NUMBER = os.getenv("TWILIO_FROM_NUMBER", "+14155238886")
+# Twilio setup commented out for Phase 1 Restoration
+# TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "AC5072477eb0401dcfd265bb47edfb9466")
+# TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "40709ea6bbf6e1f85dd0ddd76aef45b2")
+# TWILIO_FROM_NUMBER = os.getenv("TWILIO_FROM_NUMBER", "+14155238886")
 
-try:
-    twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-except Exception as e:
-    logger.warning("Twilio client initialization failed: %s", e)
-    twilio_client = None
+# try:
+#     twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+# except Exception as e:
+#     logger.warning("Twilio client initialization failed: %s", e)
+#     twilio_client = None
 
 class ProfileUpdate(BaseModel):
     """Editable fields for a Supabase profile row."""
@@ -72,7 +76,7 @@ class ProfileCreate(ProfileUpdate):
 class SOSTrigger(BaseModel):
     latitude: float
     longitude: float
-    caretaker_phone: str
+    caretaker_phone: Optional[str] = None
 
 
 class CaretakerAssignment(BaseModel):
@@ -113,7 +117,8 @@ class HealthLogCreate(BaseModel):
 
 
 class AppointmentCreate(BaseModel):
-    doctor: str
+    doctor: Optional[str] = None
+    doctor_id: Optional[str] = None
     date: str
     time: str
 
@@ -143,7 +148,6 @@ async def get_current_user(
 
         if current_user is None:
             raise ValueError("Supabase did not return a verified user.")
-
         return current_user
     except Exception as exc:
         logger.warning("Invalid Supabase credentials: %s", exc)
@@ -175,8 +179,21 @@ _PROFILES_COLS = frozenset({
     "id", "full_name", "username", "role", "phone", "email",
     "dob", "address", "latitude", "longitude",
     "family_link_code", "linked_caretaker_id",
-    "needs_caretaker_assignment", "status",
+    "needs_caretaker_assignment",
 })
+
+_DUMPABLE_TABLES = (
+    "profiles",
+    "help_requests",
+    "sos_events",
+    "system_notifications",
+    "medications",
+    "medication_logs",
+    "medical_documents",
+    "appointments",
+    "health_logs",
+    "check_ins",
+)
 
 
 def _select_profile_row(user_id: str) -> Dict[str, Any]:
@@ -256,6 +273,156 @@ def _upsert_profile_row(user_id: str, profile_data: Dict[str, Any]) -> Dict[str,
     return payload
 
 
+def _fetch_table_rows(table_name: str) -> list[Dict[str, Any]]:
+    """Fetch all rows from a Supabase table."""
+    response = supabase.table(table_name).select("*").execute()
+    return response.data or []
+
+
+def _appointment_to_api(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a frontend-compatible appointment object from the normalized table."""
+    appointment_at = row.get("appointment_date") or ""
+    date_part = appointment_at[:10] if appointment_at else row.get("date")
+    time_part = appointment_at[11:16] if "T" in appointment_at else row.get("time")
+    doctor_name = row.get("doctor_name") or row.get("doctor") or "Doctor"
+    patient_name = row.get("patient_name") or row.get("senior_name") or "Senior Citizen"
+    return {
+        **row,
+        "doctor": doctor_name,
+        "patient_name": patient_name,
+        "date": date_part,
+        "time": time_part,
+        "status": row.get("status") or "Scheduled",
+    }
+
+
+def _get_smtp_settings() -> Dict[str, Any]:
+    username = os.getenv("SMTP_USERNAME", "").strip()
+    password = os.getenv("SMTP_PASSWORD", "").strip()
+    host = os.getenv("SMTP_HOST", "smtp.gmail.com").strip() or "smtp.gmail.com"
+    port = int(os.getenv("SMTP_PORT", "465"))
+
+    return {
+        "username": username,
+        "password": password,
+        "host": host,
+        "port": port,
+    }
+
+
+def _resolve_profile_email(profile_id: str) -> str:
+    try:
+        profile = _select_profile_row(profile_id)
+        email = (profile.get("email") or "").strip()
+        if email:
+            return email
+    except Exception:
+        logger.warning("Could not resolve email from profiles table for id=%s", profile_id)
+
+    try:
+        response = supabase.auth.admin.get_user_by_id(profile_id)
+        user = getattr(response, "user", None) or response.get("user")
+        if user is not None:
+            email = (getattr(user, "email", None) or user.get("email") or "").strip()
+            if email:
+                return email
+    except Exception:
+        logger.warning("Could not resolve email from Supabase Auth for id=%s", profile_id)
+
+    return ""
+
+
+def _collect_notification_recipients(notification_data: Dict[str, Any]) -> list[Dict[str, str]]:
+    recipients_by_email: Dict[str, Dict[str, str]] = {}
+
+    def add_recipient(profile: Dict[str, Any]) -> None:
+        email = (profile.get("email") or "").strip()
+        if not email:
+            profile_id = str(profile.get("id") or "").strip()
+            if profile_id:
+                email = _resolve_profile_email(profile_id)
+        if not email:
+            return
+
+        recipients_by_email[email.lower()] = {
+            "email": email,
+            "name": profile.get("full_name") or profile.get("username") or email,
+        }
+
+    user_id = notification_data.get("user_id")
+    if user_id:
+        try:
+            add_recipient(_select_profile_row(str(user_id)))
+        except Exception:
+            logger.warning("Could not resolve notification recipient for user_id=%s", user_id)
+
+    role_target = notification_data.get("role_target")
+    if role_target:
+        try:
+            response = supabase.table("profiles").select("id, full_name, username, email, role").eq("role", role_target).execute()
+            for profile in response.data or []:
+                add_recipient(profile)
+        except Exception:
+            logger.warning("Could not resolve notification recipients for role=%s", role_target)
+
+    return list(recipients_by_email.values())
+
+
+def _send_notification_email(recipient_email: str, recipient_name: str, message: str) -> bool:
+    smtp = _get_smtp_settings()
+    if not smtp["username"] or not smtp["password"]:
+        logger.info("SMTP credentials are not configured; skipping email notification.")
+        return False
+
+    subject = "NammaCare notification"
+    body = (
+        f"Hello {recipient_name},\n\n"
+        f"You have a new NammaCare notification:\n\n"
+        f"{message}\n\n"
+        "Please open the NammaCare dashboard for details.\n"
+    )
+
+    email_message = MIMEMultipart()
+    email_message["From"] = smtp["username"]
+    email_message["To"] = recipient_email
+    email_message["Subject"] = subject
+    email_message.attach(MIMEText(body, "plain"))
+
+    if smtp["port"] == 465:
+        server = smtplib.SMTP_SSL(smtp["host"], smtp["port"], timeout=20)
+    else:
+        server = smtplib.SMTP(smtp["host"], smtp["port"], timeout=20)
+        server.starttls()
+
+    try:
+        server.login(smtp["username"], smtp["password"])
+        server.sendmail(smtp["username"], [recipient_email], email_message.as_string())
+        logger.info("Notification email sent to %s", recipient_email)
+        return True
+    finally:
+        try:
+            server.quit()
+        except Exception:
+            pass
+
+
+def _send_notification_emails(notification_data: Dict[str, Any]) -> int:
+    recipients = _collect_notification_recipients(notification_data)
+    if not recipients:
+        logger.info("No email recipients resolved for notification payload.")
+        return 0
+
+    sent_count = 0
+    for recipient in recipients:
+        try:
+            if _send_notification_email(recipient["email"], recipient["name"], notification_data["message"]):
+                sent_count += 1
+        except Exception:
+            logger.exception("Failed to send notification email to %s", recipient["email"])
+
+    return sent_count
+
+
 @app.get("/")
 async def root() -> Dict[str, str]:
     """Health-style root endpoint for quick backend checks."""
@@ -322,33 +489,28 @@ async def update_user_status(
         )
 
     try:
-        response = await run_in_threadpool(
-            lambda: supabase
-            .table("profiles")
-            .update({"status": payload.status})
-            .eq("id", payload.uid)
-            .select("*")
-            .execute()
+        updated = await run_in_threadpool(
+            _update_profile_row,
+            payload.uid,
+            {"status": payload.status},
         )
-        rows = response.data or []
-        if not rows:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"User not found for id={payload.uid}.",
-            )
-        row = rows[0]
         return {
             "ok": True,
             "user": {
-                "id": row.get("id"),
-                "uid": row.get("id"),
-                "full_name": row.get("full_name"),
-                "username": row.get("username"),
-                "role": row.get("role"),
-                "phone": row.get("phone"),
-                "status": row.get("status", "Active"),
+                "id": updated.get("id"),
+                "uid": updated.get("id"),
+                "full_name": updated.get("full_name"),
+                "username": updated.get("username"),
+                "role": updated.get("role"),
+                "phone": updated.get("phone"),
+                "status": updated.get("status", payload.status),
             },
         }
+    except LookupError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User not found for id={payload.uid}.",
+        )
     except HTTPException:
         raise
     except Exception as exc:
@@ -386,11 +548,46 @@ async def get_admin_stats(current_user: Any = Depends(get_current_user)) -> Dict
         logger.error(f"Admin stats database query failure: {exc}")
         profiles, requests, active_sos = [], [], 0
 
+    def normalize_request_status(value: Any) -> str:
+        return str(value or "").strip().lower()
+
     return {
         "total_seniors": sum(1 for p in profiles if p.get("role") == "Senior Citizen"),
         "total_volunteers": sum(1 for p in profiles if p.get("role") == "Volunteer"),
         "active_sos": active_sos,
-        "pending_requests": sum(1 for r in requests if r.get("status") == "Pending"),
+        "pending_requests": sum(1 for r in requests if normalize_request_status(r.get("status")) == "pending"),
+    }
+
+
+@app.get("/api/admin/database-dump")
+async def get_database_dump(current_user: Any = Depends(get_current_user)) -> Dict[str, Any]:
+    """Return all rows from the project tables visible through Supabase."""
+    try:
+        caller_profile = await run_in_threadpool(_select_profile_row, str(current_user.id))
+    except Exception:
+        caller_profile = {}
+
+    if caller_profile.get("role") != "Admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Admin users can view the database dump.",
+        )
+
+    dump: Dict[str, Any] = {}
+    errors: Dict[str, str] = {}
+
+    for table_name in _DUMPABLE_TABLES:
+        try:
+            dump[table_name] = await run_in_threadpool(_fetch_table_rows, table_name)
+        except Exception as exc:
+            logger.exception("Failed to dump table %s", table_name)
+            dump[table_name] = []
+            errors[table_name] = str(exc)
+
+    return {
+        "tables": dump,
+        "counts": {table_name: len(rows) for table_name, rows in dump.items()},
+        "errors": errors,
     }
 
 
@@ -400,17 +597,31 @@ async def create_check_in(
 ) -> Dict[str, Any]:
     """Insert a once-per-day safety check-in for the authenticated user."""
     user_id = str(current_user.id)
+    today = str(date.today())
     checkin_data = {
         "user_id": user_id,
-        "checked_in_date": str(date.today()),
+        "checked_in_date": today,
     }
 
     try:
-        response = await run_in_threadpool(
+        existing = await run_in_threadpool(
             lambda: supabase
             .table("check_ins")
-            .upsert(checkin_data, on_conflict="user_id,checked_in_date", ignore_duplicates=True)
+            .select("id")
+            .eq("user_id", user_id)
+            .eq("checked_in_date", today)
+            .limit(1)
             .execute()
+        )
+        if existing.data:
+            return {
+                "success": True,
+                "checked_in": True,
+                "created": False,
+            }
+
+        response = await run_in_threadpool(
+            lambda: supabase.table("check_ins").insert(checkin_data).execute()
         )
         rows = response.data or []
         return {
@@ -469,6 +680,7 @@ async def create_notification(
         response = await run_in_threadpool(
             lambda: supabase.table("system_notifications").insert(notification_data).execute()
         )
+        await run_in_threadpool(_send_notification_emails, notification_data)
         rows = response.data or []
         return {"success": True, "notification": rows[0] if rows else notification_data}
     except Exception as exc:
@@ -687,6 +899,10 @@ async def create_medication_log(
         "med_name": payload.med_name,
         "status": payload.status,
     }
+    try:
+        log_data["medication_id"] = int(payload.med_id)
+    except (TypeError, ValueError):
+        pass
 
     try:
         response = await run_in_threadpool(
@@ -836,18 +1052,39 @@ async def create_appointment(
     current_user: Any = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """Create an appointment for the authenticated senior user."""
-    try:
-        profile = await run_in_threadpool(_select_profile_row, str(current_user.id))
-    except Exception:
-        profile = {}
+    doctor_id = payload.doctor_id
+    doctor_name = payload.doctor
+    if not doctor_id and doctor_name:
+        try:
+            doctor_response = await run_in_threadpool(
+                lambda: supabase
+                .table("profiles")
+                .select("id, full_name")
+                .eq("role", "Doctor")
+                .eq("full_name", doctor_name)
+                .limit(1)
+                .execute()
+            )
+            doctor_rows = doctor_response.data or []
+            if doctor_rows:
+                doctor_id = doctor_rows[0].get("id")
+                doctor_name = doctor_rows[0].get("full_name")
+        except Exception:
+            logger.warning("Failed to resolve doctor by name=%s", doctor_name)
+
+    if not doctor_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Choose a registered doctor before booking an appointment.",
+        )
+
+    appointment_at = f"{payload.date}T{payload.time}:00+05:30"
 
     appointment_data = {
-        "user_id": str(current_user.id),
-        "patient_name": profile.get("full_name") or "Senior Citizen",
-        "doctor": payload.doctor,
-        "date": payload.date,
-        "time": payload.time,
-        "status": "Confirmed",
+        "senior_id": str(current_user.id),
+        "doctor_id": doctor_id,
+        "appointment_date": appointment_at,
+        "status": "Scheduled",
     }
 
     try:
@@ -855,12 +1092,35 @@ async def create_appointment(
             lambda: supabase.table("appointments").insert(appointment_data).execute()
         )
         rows = response.data or []
-        return {"success": True, "data": rows[0] if rows else appointment_data}
+        saved = rows[0] if rows else appointment_data
+        return {"success": True, "data": _appointment_to_api({**saved, "doctor_name": doctor_name})}
     except Exception as exc:
         logger.exception("Failed to create appointment for user_id=%s", current_user.id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to save appointment.",
+        ) from exc
+
+
+@app.get("/api/doctors")
+async def list_doctors(current_user: Any = Depends(get_current_user)) -> Dict[str, Any]:
+    """Return registered doctor profiles for appointment booking."""
+    _ = current_user
+    try:
+        response = await run_in_threadpool(
+            lambda: supabase
+            .table("profiles")
+            .select("id, full_name, phone")
+            .eq("role", "Doctor")
+            .order("full_name", desc=False)
+            .execute()
+        )
+        return {"doctors": response.data or []}
+    except Exception as exc:
+        logger.exception("Failed to fetch doctors.")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to load doctors.",
         ) from exc
 
 
@@ -878,29 +1138,37 @@ async def list_appointments(
 
     try:
         if role == "Doctor":
-            doctor_designation = (caller_profile.get("full_name") or "").strip()
-            if not doctor_designation:
-                return {"appointments": []}
-
             response = await run_in_threadpool(
                 lambda: supabase
                 .table("appointments")
-                .select("*")
-                .eq("doctor", doctor_designation)
-                .order("date", desc=False)
+                .select("*, senior:profiles!appointments_senior_id_fkey(full_name), doctor:profiles!appointments_doctor_id_fkey(full_name)")
+                .eq("doctor_id", str(current_user.id))
+                .order("appointment_date", desc=False)
                 .execute()
             )
-            rows = response.data or []
+            rows = []
+            for row in response.data or []:
+                rows.append(_appointment_to_api({
+                    **row,
+                    "senior_name": (row.get("senior") or {}).get("full_name"),
+                    "doctor_name": (row.get("doctor") or {}).get("full_name"),
+                }))
         else:
             response = await run_in_threadpool(
                 lambda: supabase
                 .table("appointments")
-                .select("*")
-                .eq("user_id", str(current_user.id))
-                .order("date", desc=False)
+                .select("*, doctor:profiles!appointments_doctor_id_fkey(full_name)")
+                .eq("senior_id", str(current_user.id))
+                .order("appointment_date", desc=False)
                 .execute()
             )
-            rows = response.data or []
+            rows = [
+                _appointment_to_api({
+                    **row,
+                    "doctor_name": (row.get("doctor") or {}).get("full_name"),
+                })
+                for row in response.data or []
+            ]
 
         return {"appointments": rows}
     except Exception as exc:
@@ -931,13 +1199,13 @@ async def list_caretaker_seniors(
         response = await run_in_threadpool(
             lambda: supabase
             .table("profiles")
-            .select("id, full_name, phone, address, status")
+            .select("id, full_name, phone, address")
             .eq("role", "Senior Citizen")
             .eq("linked_caretaker_id", str(current_user.id))
             .order("full_name", desc=False)
             .execute()
         )
-        return {"seniors": response.data or []}
+        return {"seniors": [{**row, "status": row.get("status", "Active")} for row in response.data or []]}
     except Exception as exc:
         logger.exception("Failed to fetch linked seniors for caretaker_id=%s", current_user.id)
         raise HTTPException(
@@ -961,7 +1229,7 @@ async def create_health_log(
     health_data = {
         "user_id": str(current_user.id),
         "blood_pressure": payload.blood_pressure,
-        "sugar_level": payload.sugar_level,
+        "sugar_level": int(payload.sugar_level),
     }
 
     if systolic > 140 or payload.sugar_level > 150:
@@ -1016,11 +1284,11 @@ async def list_health_logs(
     try:
         if len(target_user_ids) == 1:
             response = await run_in_threadpool(
-                lambda: supabase
+            lambda: supabase
                 .table("health_logs")
                 .select("*")
                 .eq("user_id", target_user_ids[0])
-                .order("created_at", desc=True)
+                .order("logged_at", desc=True)
                 .limit(7)
                 .execute()
             )
@@ -1030,7 +1298,7 @@ async def list_health_logs(
                 .table("health_logs")
                 .select("*")
                 .in_("user_id", target_user_ids)
-                .order("created_at", desc=True)
+                .order("logged_at", desc=True)
                 .limit(7)
                 .execute()
             )
@@ -1067,16 +1335,23 @@ async def create_emergency_contact(
             .insert(
                 {
                     "user_id": user_id,
-                    "name": payload.name,
+                    "contact_name": payload.name,
                     "relationship": payload.relationship,
-                    "phone": payload.phone,
+                    "phone_number": payload.phone,
                     "is_primary": payload.is_primary,
                 }
             )
             .execute()
         )
         rows = response.data or []
-        return {"success": True, "contact": rows[0] if rows else None}
+        contact = rows[0] if rows else None
+        if contact:
+            contact = {
+                **contact,
+                "name": contact.get("contact_name"),
+                "phone": contact.get("phone_number"),
+            }
+        return {"success": True, "contact": contact}
     except Exception as exc:
         logger.exception("Failed to create emergency contact for user_id=%s", user_id)
         raise HTTPException(
@@ -1101,7 +1376,15 @@ async def list_emergency_contacts(
             .order("created_at", desc=False)
             .execute()
         )
-        return {"contacts": response.data or []}
+        contacts = [
+            {
+                **row,
+                "name": row.get("contact_name"),
+                "phone": row.get("phone_number"),
+            }
+            for row in response.data or []
+        ]
+        return {"contacts": contacts}
     except Exception as exc:
         logger.exception("Failed to list emergency contacts for user_id=%s", user_id)
         raise HTTPException(
@@ -1164,10 +1447,10 @@ async def update_profile(
         )
 
     user_email = getattr(current_user, "email", None)
-    if update_data.get("role") == "Admin" and user_email != "admin@nammacare.org":
+    if update_data.get("role") == "Admin" and user_email != "pal.arnav68@gmail.com":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Unauthorized: Admin role can only be assigned to admin@nammacare.org",
+            detail="Unauthorized: Admin role can only be assigned to the designated admin email.",
         )
 
     try:
@@ -1223,13 +1506,13 @@ async def create_profile(
 
     # Secure Admin Auto-Promotion Rule
     user_email = getattr(current_user, "email", None)
-    if user_email == "admin@nammacare.org":
+    if user_email == "pal.arnav68@gmail.com":
         profile_data["role"] = "Admin"
         logger.info(
             "User %s securely auto-promoted to Admin via email authorization gateway.", user_id
         )
 
-    elif profile_data["role"] == "Admin" and user_email != "admin@nammacare.org":
+    elif profile_data["role"] == "Admin" and user_email != "pal.arnav68@gmail.com":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Intrusion Blocker: Unauthorized email cannot register as an Administrator.",
@@ -1394,9 +1677,8 @@ async def create_help_request(
     """Insert a live help ticket directly into our Supabase help_requests table."""
     request_data = {
         "senior_id": str(current_user.id),
-        "category": payload.category,
-        "priority": payload.priority,
-        "description": payload.description,
+        "title": payload.category,
+        "description": f"[{payload.priority}] {payload.description or ''}".strip(),
         "status": "Pending",
     }
 
@@ -1445,7 +1727,7 @@ async def claim_help_request(
             raise HTTPException(status_code=400, detail="Request is not available for claiming.")
 
         updated = await run_in_threadpool(
-            lambda: supabase.table("help_requests").update({"status": "Assigned", "volunteer_id": str(current_user.id)}).eq("id", request_id).execute()
+            lambda: supabase.table("help_requests").update({"status": "Accepted", "volunteer_id": str(current_user.id)}).eq("id", request_id).execute()
         )
         return {"success": True, "request": updated.data[0]}
     except HTTPException:
@@ -1460,7 +1742,7 @@ async def reject_help_request(
     request_id: str,
     current_user: Any = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    """Volunteer rejects a pending help request."""
+    """Volunteer rejects a pending help request and removes it from the pending queue."""
     try:
         lookup = await run_in_threadpool(
             lambda: supabase.table("help_requests").select("*").eq("id", request_id).execute()
@@ -1469,10 +1751,14 @@ async def reject_help_request(
         if not rows:
             raise HTTPException(status_code=404, detail="Request not found.")
 
+        target = rows[0]
+        if target.get("status") != "Pending":
+            raise HTTPException(status_code=400, detail="Request is not available for rejecting.")
+
         updated = await run_in_threadpool(
             lambda: supabase.table("help_requests").update({"status": "Rejected"}).eq("id", request_id).execute()
         )
-        return {"success": True, "request": updated.data[0]}
+        return {"success": True, "request": updated.data[0], "rejected": True}
     except HTTPException:
         raise
     except Exception as exc:
@@ -1510,61 +1796,74 @@ async def trigger_sos(
     payload: SOSTrigger,
     current_user: Any = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    """Trigger an emergency SOS SMS via Twilio."""
-    if not twilio_client:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error": "Twilio client is not configured on the server."}
-        )
-
+    """Trigger an emergency SOS (Simulated SMS broadcast for Phase 1)."""
     try:
         profile = _select_profile_row(str(current_user.id))
         user_name = profile.get("full_name", "Unknown User")
-        target_phone = payload.caretaker_phone
+        target_email = ""
+        target_name = "Caretaker"
         
-        # Check if senior is linked to a caretaker and retrieve their registered phone number
+        # Check if senior is linked to a caretaker and retrieve their registered email address.
         linked_id = profile.get("linked_caretaker_id")
         if linked_id:
             try:
                 caretaker_profile = _select_profile_row(str(linked_id))
-                if caretaker_profile.get("phone"):
-                    target_phone = caretaker_profile["phone"]
-                    logger.info("Dynamically routing SOS alert to linked caretaker: %s", target_phone)
+                target_email = _resolve_profile_email(str(linked_id))
+                target_name = caretaker_profile.get("full_name") or caretaker_profile.get("username") or "Caretaker"
+                if target_email:
+                    logger.info("Dynamically routing SOS alert to linked caretaker email: %s", target_email)
             except Exception as link_exc:
-                logger.warning("Could not resolve caretaker phone for ID %s: %s", linked_id, link_exc)
+                logger.warning("Could not resolve caretaker email for ID %s: %s", linked_id, link_exc)
     except Exception:
         user_name = "Unknown User"
-        target_phone = payload.caretaker_phone
+        target_email = ""
+        target_name = "Caretaker"
 
     message_body = f"EMERGENCY: Senior Citizen {user_name} has triggered an SOS! Live Location: https://www.google.com/maps?q={payload.latitude},{payload.longitude}"
 
-    def _send_sms():
-        return twilio_client.messages.create(
-            body=message_body,
-            from_=TWILIO_FROM_NUMBER,
-            to=target_phone
-        )
+    logger.info(
+        "\n==================================================\n"
+        "[SOS ALERT]\n"
+        "TO EMAIL: %s\n"
+        "MESSAGE: %s\n"
+        "==================================================",
+        target_email or "<unresolved>",
+        message_body
+    )
 
     try:
-        await run_in_threadpool(_send_sms)
-        # Persist SOS events in Supabase for caretaker/admin feeds.
-        try:
-            await run_in_threadpool(
-                lambda: supabase.table("sos_events").insert({
-                    "user_id": str(current_user.id),
-                    "latitude": payload.latitude,
-                    "longitude": payload.longitude,
-                    "resolved": False,
-                }).execute()
-            )
-        except Exception as persist_exc:
-            logger.warning("SOS event persistence failed: %s", persist_exc)
-        return {"success": True, "message": "SOS alert sent successfully."}
+        # Persist SOS events in Supabase for caretaker/admin feeds (Sprint 1 requirement).
+        await run_in_threadpool(
+            lambda: supabase.table("sos_events").insert({
+                "user_id": str(current_user.id),
+                "latitude": payload.latitude,
+                "longitude": payload.longitude,
+                "resolved": False,
+            }).execute()
+        )
+
+        email_error = None
+        email_sent = False
+        if target_email:
+            try:
+                email_sent = await run_in_threadpool(_send_notification_email, target_email, target_name, message_body)
+            except Exception as email_exc:
+                email_error = str(email_exc)
+                logger.exception("SOS email delivery failed for %s", target_email)
+
+        return {
+            "success": True, 
+            "message": "SOS alert recorded successfully.",
+            "alert_message": message_body,
+            "target_email": target_email,
+            "email_sent": email_sent,
+            "email_error": email_error,
+        }
     except Exception as exc:
-        logger.exception("Failed to send SOS SMS via Twilio.")
+        logger.exception("Failed to persist SOS event to database.")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error": "Failed to dispatch SOS alert.", "details": str(exc)},
+            detail={"error": "Failed to persist SOS event to database.", "details": str(exc)},
         ) from exc
 
 

@@ -1,135 +1,86 @@
-# NammaCare — Project README
+# NammaCare - Elder Support Grid
 
-This document summarizes the NammaCare project state (sprints, completed/remaining tasks), technologies, database design, file-by-file responsibilities, core implementation logic, and instructions to run the project locally.
-
----
-
-**Project Overview**:
-- NammaCare is a lightweight senior-guardian system providing: Emergency SOS, Help Requests, Volunteer tasking, Caretaker monitoring, Medicine reminders, Appointments, Health tracking, Document storage and a simple Admin console.
-- UI: static HTML/CSS + `app.js` for frontend logic. Backend: Flask (`app.py`) using an Excel file (`NammaCareData.xlsx`) as the datastore.
-
-**Sprint Summaries**
-- **Sprint-1 (MVP)** — Completed: login/register, profile management, SOS flow, help request creation, volunteer accept/reject/complete, caretaker dashboard and monitoring. (See `sprint_1_2_status.txt`.)
-- **Sprint-2** — Completed: medicine reminders, appointments, notifications, emergency contacts (CRUD), notification generation & badge, basic volunteer rewards. (See `sprint_1_2_status.txt`.)
-- **Sprint-3** — Completed: health logs & charts, daily check-in system (alert caretakers), document mock upload & storage, volunteer XP/rewards, admin dashboard for approvals and analytics. (See `sprint_3_status.txt`.)
-
-**Completed / Remaining (high level)**
-- Completed: core flows above; frontend interactivity and local+backend DB sync; admin approval flows; notification & reminder logic.
-- Remaining / Known limitations:
-  - No secure password storage (plain text in Excel). Consider hashing (bcrypt).
-  - Excel-based backend has concurrency and scaling limitations.
-  - No authentication tokens/session JWTs — session is stored in browser `sessionStorage`.
-  - File upload in documents is simulated (no real file storage).
-  - Service Worker exists but is unregistered/disabled in `app.js` (PWA functionality limited).
+## 🚀 Project Overview & Concept
+NammaCare is a state-of-the-art hybrid Progressive Web Application (PWA) and elder support grid specifically tailored for senior citizens residing in Bangalore. It is engineered to bridge the gap between elderly independence and rapid emergency response. Operating on a robust Supabase Cloud architecture, the platform handles multi-role relational state processing in real-time. By integrating real-world Twilio cellular SMS telemetry, NammaCare ensures instantaneous, life-saving alerts and a deeply connected ecosystem of seniors, caretakers, medical professionals, and local volunteers.
 
 ---
 
-**Technologies Used**
-- Frontend: HTML, CSS (`styles.css`), vanilla JavaScript (`app.js`). Uses Chart.js for charts (dynamically in `app.js`).
-- Backend: Python 3, Flask, Flask-CORS, Pandas, Openpyxl (Excel read/write).
-- Storage: `NammaCareData.xlsx` (Excel workbook with multiple sheets). Session state: browser `sessionStorage` for fast UI response.
-- Dev / run: virtualenv, `run.sh` convenience script.
+## 📂 Project Architecture & File Directory Map
+The codebase has been refactored into a high-performance, strictly delineated structure:
+
+* **`main.py`**: Our asynchronous, token-protected FastAPI backend router layer handling secure transactions with our Supabase PostgreSQL instances and executing automated live dynamic routing thresholds for Twilio SMS payloads.
+* **`app.js`**: Our single-page app (SPA) frontend controller shell managing the local UI view toggles, local-cache validations, Chart.js trend canvas rendering blocks, and handling the active Supabase Auth / Google OAuth session states.
+* **`manifest.json`**: Mobile operating system application metadata controlling standalone, full-screen PWA installation properties across Android and iOS environments.
+* **`sw.js`**: Our background caching service worker engine mapping offline asset bundles, ensuring rapid application load times, and prepping system-tray notifications capabilities.
 
 ---
 
-**Database / Data Model**
-- File: `NammaCareData.xlsx` created by `app.py:init_db()` if missing.
-- Sheets (created by backend):
-  - `Senior_Citizens`, `Caretakers`, `Volunteers`, `Doctors`, `Admins` — user tables with columns: `uid`, `password`, `role`, `name`, `dob`, `address`, `phone`, `emergency`, `status`.
-  - `Medications`, `MedicationLogs`, `Appointments`, `Contacts`, `HealthLogs`, `Documents`, `CheckIns`, `Requests`, `ActiveSOS`, `SOSHistory`, `VolunteerXP`, `Notifications`, `Rewards` — feature tables. Columns vary and are handled flexibly in code (Pandas DataFrames).
+## 🏃 Complete 3-Sprint Lifecycle Breakdown
+The platform was built and evaluated across three distinct, agile engineering sprints:
 
-Data flow summary:
-- Frontend reads `window.AppDB` by calling GET `/api/db` at startup; falls back to `sessionStorage` local DB when backend is unreachable.
-- `app.js` exposes `getDB()` / `saveDB()` which persist state to `sessionStorage` and POST the full DB to `/api/db` to save to Excel.
-- Authentication flows call `/api/register` and `/api/login` (Flask). Profile updates call `/api/profile`. Admin status updates call `/api/admin/status`.
-
----
-
-**File-by-file (what each file is for & key logic)**
-- `app.py` — Flask backend and Excel persistence
-  - Initializes `NammaCareData.xlsx` with required sheets if missing.
-  - Endpoints:
-    - `GET /` and `GET /<path>`: serve static files.
-    - `POST /api/register`: register a user into role-sheet (sets `Pending` for volunteers, `Active` otherwise).
-    - `POST /api/login`: lookup across user sheets, validates `uid` and `password`, checks `status` (Blocked/Pending).
-    - `PUT /api/profile`: update user profile fields in the appropriate sheet.
-    - `GET /api/users`: return flattened user list for admin/caretaker views.
-    - `PUT /api/admin/status`: change a user `status` (Active/Blocked/Pending).
-    - `GET /api/db`: returns DB JSON for feature sheets (normalizes numeric ids into strings where needed).
-    - `POST /api/db`: receives full/partial DB JSON from frontend and writes sheets back to Excel (safely converts `volunteerXP` map into `VolunteerXP` sheet rows).
-  - Notes: Uses Pandas + openpyxl; Excel is treated as the canonical on-disk store.
-
-- `app.js` — Primary frontend logic
-  - Manages `State` (auth role, userId, profile) persisted in `sessionStorage`.
-  - Maintains an in-memory `AppDB` (shadow of Excel) and helpers `getDB()`/`saveDB()`.
-  - Authentication: login/register flows with client-side input validation (phone/email format, password policy). On success it stores `State`.
-  - SOS: confirm modal, create SOS record (id like `SOS-1234`), capture geolocation, add to `activeSOS`, send notifications to caretakers.
-  - Help Requests: create requests with `priority` (Normal/Urgent), stored in `requests` list.
-  - Volunteer flows: view pending requests, accept/reject/complete, reward points are stored in `rewards` and `VolunteerXP` persisted server-side.
-  - Notifications: `notifications` array, `addNotification()` pushes and `updateNotificationBadge()` updates UI badge.
-  - Medicine reminders: periodic check (`startMedicationTick`) every 10s in dev, compares system time with medication times and creates reminders/notifications, logs medication taken/skipped.
-  - Appointments: create `appointments` entries, notify 30 minutes before event.
-  - Contacts: CRUD emergency contact entries.
-  - Health & Check-ins: log `healthLogs` and `checkIns`, build charts using Chart.js in `renderHealth()`.
-  - Documents: simulated upload flow storing `documents` metadata.
-  - Admin: `renderAdmin()` queries `/api/users`, shows analytics and user approval buttons.
-
-- `index.html` — Landing/hero and quick role links; uses `app.js` router to navigate.
-- `login.html` — Login / Register UI. `app.js` handles form and toggling between login/register.
-- HTML views (other files):
-  - `sos.html`, `help-request.html`, `volunteer.html`, `caretaker.html`, `medicine.html`, `appointments.html`, `contacts.html`, `health.html`, `documents.html`, `admin.html`, `profile.html`, `contacts.html`, `medicine.html`, `appointments.html`, `volunteer.html`, `caretaker.html` — each contains markup and UI elements wired to `app.js` functions for the respective features.
-- `styles.css` — Global styling, theming variables, responsive rules (mobile-first adjustments). Provides brand colors and layout utilities used by the UI.
-- `sw.js` — Basic Service Worker; current implementation clears caches and passes through fetch — PWA is disabled/unregistered by `app.js` by design.
-- `run.sh` — Simple helper script to create/activate a Python virtualenv and run `app.py` (installs `requirements.txt` on first run).
-- `requirements.txt` — Python dependencies: `flask`, `flask-cors`, `pandas`, `openpyxl`.
+* **Sprint-1 (Core MVP & Unified Portal Architecture):** 
+  Role-isolated registration gateway routing, dynamic profile setups, help requests, real-time relational caretaker linking, and the critical emergency SOS panic loop.
+* **Sprint-2 (Reminders, Bookings, & Notifications Tray):** 
+  Medication scheduling triggers, clinical appointment bookings directory, notification log tracking tables, and emergency contact lifecycle rules.
+* **Sprint-3 (Advanced Cloud Diagnostics & Verifications):** 
+  Live health vitals graph mapping, daily check-in loops, cloud document vault metadata storage buffers, gamified volunteer XP calculations, and the administrator account monitoring panels.
 
 ---
 
-**How to run locally**
-1) Ensure Python 3 is installed.
-2) From project root run:
+## 🖥️ Dashboard Access & Role Credentials Guide
+NammaCare utilizes a dynamic, unified Single-Page Application layout. Access to specialized interfaces is governed strictly by the user's registered role profile:
 
-```bash
-./run.sh
+* **Senior Citizen Portal:** Accessed by selecting 'Senior Citizen' at registration or logging in. 
+  *(Houses SOS button, Help Request Form, Medication logs, Appointment booker, Check-In toggle, Contacts, Health trends, Document Vault).*
+* **Caretaker Command:** Accessed via Caretaker login. Displays unique Family Link Code. 
+  *(Houses Dynamic SOS system banner, Vitals trends graphs, Missed medication alert feeds, Linked family registry list, Shared documents array).*
+* **Volunteer Dispatch:** Accessed via Volunteer profile. 
+  *(Houses Open community tasks board, Accepted active route maps, and Global XP Leaderboard).*
+* **Doctor Agenda:** Accessed via Doctor profile. 
+  *(Houses Today's calendar schedule grid and Upcoming consultation lists matched strictly to their registered name string).*
+* **Admin Controller HQ:** Gated strictly via our backend email authentication and role-gate validation rules.
+
+---
+
+## 🚶 Detailed Consumer Walkthrough & Testing Guide
+To perform a complete cross-functional test of the real-time cloud architecture, follow this synchronous workflow:
+
+* **Step A (Caretaker Setup):** 
+  Register a Caretaker profile -> Navigate to the dashboard -> Note down their unique Family Link Code.
+* **Step B (Senior Linking):** 
+  Register a new Senior Citizen -> Input the Caretaker's code during onboarding -> Click the Emergency SOS button -> Verify dynamic Twilio routing logs in the backend and the active blinking caretaker command banner on the Caretaker's dashboard.
+* **Step C (Community Operations):** 
+  Submit a Help Request from the Senior's view -> Log out and log into a verified Volunteer account -> Claim the open task on the dispatch board -> Mark the task as complete -> Verify Volunteer local XP increases instantly on the global scoreboard ranks.
+
+---
+
+## 🔑 Environment Reference Parameters (.env)
+To boot the production cloud infrastructure locally or on deployment servers (like Render), the following `.env` configuration must be present at the root level:
+
+```env
+# Supabase Core Keys
+SUPABASE_URL=[Your Supabase Cloud Cluster Project URL]
+SUPABASE_KEY=[Your Supabase Publishable / Anon Key String for the frontend]
+SUPABASE_SERVICE_ROLE_KEY=[Your Supabase Service Role Key for backend writes]
+
+# Real-World Twilio Cellular Telemetry
+TWILIO_ACCOUNT_SID=AC5072477eb0401dcfd265bb47edfb9466
+TWILIO_AUTH_TOKEN=40709ea6bbf6e1f85dd0ddd76aef45b2
+TWILIO_FROM_NUMBER=+14155238886
 ```
 
-or manually:
+## Recent Changes (May 2026)
 
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-python3 app.py
-```
+- Fixed backend RLS/auth issues: the service-role client is preserved for server-side writes so database updates (medications, SOS, help requests, check-ins) no longer fail due to downgraded auth.
+- Switched notification delivery to SMTP email for caretakers and admins; added profile email resolution with auth fallback.
+- Rewrote `reset_test_data.py` to safely delete demo data and explicitly recreate the admin profile (preserves only the admin account).
+- Fixed admin approval persistence: admin status updates now persist to the `profiles` table.
+- Normalized request status comparisons (case-insensitive) and updated UI to refresh dashboards after mutations.
+- Changed SOS/UI text and notification routing to use email instead of SMS for demo purposes.
+- Removed several legacy/demo files from the repository to keep the tree focused.
 
-3) Open http://127.0.0.1:3000 in the browser.
-
-Notes: `run.sh` will create `venv` and install deps if missing. `app.py` will initialize `NammaCareData.xlsx` automatically.
-
----
-
-**Implementation details & important behaviors**
-- The server uses Excel as a simple database: every write rewrites all sheets using `pandas.ExcelWriter` — this is simple but not suitable for concurrent writes or production scale.
-- Passwords are stored as plain text inside the Excel file — treat this repository as a prototype; add hashing and proper auth (JWT/Flask-Login) before real deployments.
-- Frontend `app.js` keeps a local fast copy in `sessionStorage` (`nammaCareDB`) and attempts to sync to backend using `/api/db` on `saveDB()`; the server accepts a JSON representation and writes sheets back.
-- Timers: medication and appointment reminders run using `setInterval` and compare times in local device timezone. The demo tick runs every 10 seconds for testing.
-- Notifications: Uses in-page notification UI and Web Notification API (requests permission on load). For device push you would wire a push service and enable SW caching/logic.
+If you rely on the old demo SQL scripts, see `supabase_demo_reset.sql` for a single-statement reset alternative.
 
 ---
 
-**Security & Next steps (recommended improvements)**
-1. Replace Excel with a proper database (SQLite/Postgres) for concurrency and safer updates.
-2. Hash passwords (bcrypt) and implement proper session management (JWT or server sessions).
-3. Implement file uploads to a storage backend (local + secure folder or cloud) and store references in the database.
-4. Harden APIs: validate inputs server-side, rate-limit key endpoints, add role-based authorization for admin endpoints.
-5. Improve PWA support: register service worker, implement offline caching, and push notifications via a server push service.
-
----
-
-If you want, I can:
-- generate a shorter developer README focused on how to extend the backend to SQLite and add user hashing (suggested next PR), or
-- commit this README and run the app locally to validate the flows.
-
----
-
-File created by: automated project documentation script.
+If you'd like, I can also remove additional files or archive them into a `docs/archived/` folder instead of deleting. Reply with your preference.

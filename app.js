@@ -1,5 +1,11 @@
 // ─── PWA Service Worker Registration ─────────────────────────────────────────
-// Registers a service worker to handle asset caching and mobile standalone installation.
+// Service worker registration disabled for Phase 1 restoration.
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations()
+        .then(registrations => registrations.forEach(reg => reg.unregister()))
+        .catch(err => console.warn('Service worker cleanup failed:', err));
+}
+/*
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('sw.js')
@@ -7,6 +13,7 @@ if ('serviceWorker' in navigator) {
             .catch(err => console.error('PWA Service Worker installation failed:', err));
     });
 }
+*/
 
 // ─── Local Cache State (sessionStorage) ──────────────────────────────────────
 // Non-migrated modules still use a local cache. Medications/health/profile are
@@ -30,9 +37,7 @@ if (!sessionStorage.getItem('nammaCareDB')) {
     sessionStorage.setItem('nammaCareDB', JSON.stringify(DB_SCHEMA));
 }
 
-const API_BASE_URL = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost'
-    ? 'http://127.0.0.1:8000'
-    : 'https://nammacare-backend.onrender.com';
+const API_BASE_URL = 'http://127.0.0.1:8000';
 
 let supabaseClient = null;
 
@@ -103,15 +108,36 @@ function persistLocalCache(db) {
     sessionStorage.setItem('nammaCareDB', JSON.stringify(db));
 }
 
+function getStoredAccessToken() {
+    for (let i = 0; i < sessionStorage.length; i += 1) {
+        const key = sessionStorage.key(i);
+        if (!key || !key.startsWith('sb-') || !key.endsWith('-auth-token')) continue;
+        try {
+            const raw = sessionStorage.getItem(key);
+            const parsed = raw ? JSON.parse(raw) : null;
+            const token = parsed?.access_token || parsed?.currentSession?.access_token;
+            if (token && token.split('.').length === 3) return token;
+        } catch (_) {
+            // Ignore unrelated sessionStorage entries.
+        }
+    }
+    return null;
+}
+
 function authHeaders(extra = {}) {
+    const token = State.accessToken || getStoredAccessToken();
+    if (token) {
+        State.accessToken = token;
+        saveState();
+    }
     return {
         ...extra,
-        Authorization: `Bearer ${State.accessToken}`
+        Authorization: `Bearer ${token || ''}`
     };
 }
 
 async function fetchMedicationsFromApi() {
-    if (!State.accessToken) {
+    if (!State.accessToken && !getStoredAccessToken()) {
         return [];
     }
     const response = await fetch(`${API_BASE_URL}/api/medications`, {
@@ -125,7 +151,7 @@ async function fetchMedicationsFromApi() {
 }
 
 async function fetchHealthLogsFromApi() {
-    if (!State.accessToken) {
+    if (!State.accessToken && !getStoredAccessToken()) {
         return [];
     }
     const response = await fetch(`${API_BASE_URL}/api/health/logs`, {
@@ -141,7 +167,7 @@ async function fetchHealthLogsFromApi() {
 async function fetchHelpRequests() {
     try {
         const response = await fetch(`${API_BASE_URL}/api/requests`, {
-            headers: State.accessToken ? authHeaders() : {}
+            headers: (State.accessToken || getStoredAccessToken()) ? authHeaders() : {}
         });
         if (!response.ok) {
             return [];
@@ -155,8 +181,12 @@ async function fetchHelpRequests() {
     }
 }
 
+function normalizeRequestStatus(status) {
+    return String(status || '').trim().toLowerCase();
+}
+
 async function fetchSOSHistoryFromApi() {
-    if (!State.accessToken) {
+    if (!State.accessToken && !getStoredAccessToken()) {
         return [];
     }
     try {
@@ -175,7 +205,7 @@ async function fetchSOSHistoryFromApi() {
 }
 
 async function fetchMedicationLogsFromApi() {
-    if (!State.accessToken) {
+    if (!State.accessToken && !getStoredAccessToken()) {
         return [];
     }
     try {
@@ -194,7 +224,7 @@ async function fetchMedicationLogsFromApi() {
 }
 
 async function fetchDocumentsFromApi() {
-    if (!State.accessToken) {
+    if (!State.accessToken && !getStoredAccessToken()) {
         return [];
     }
     try {
@@ -213,7 +243,7 @@ async function fetchDocumentsFromApi() {
 }
 
 async function fetchCaretakerSeniorsFromApi() {
-    if (!State.accessToken) {
+    if (!State.accessToken && !getStoredAccessToken()) {
         return [];
     }
     try {
@@ -232,7 +262,7 @@ async function fetchCaretakerSeniorsFromApi() {
 }
 
 async function fetchUsersFromApi() {
-    if (!State.accessToken) {
+    if (!State.accessToken && !getStoredAccessToken()) {
         return [];
     }
     try {
@@ -251,7 +281,7 @@ async function fetchUsersFromApi() {
 }
 
 async function fetchContactsFromApi() {
-    if (!State.accessToken) {
+    if (!State.accessToken && !getStoredAccessToken()) {
         return [];
     }
     try {
@@ -269,17 +299,33 @@ async function fetchContactsFromApi() {
     }
 }
 
+async function fetchDoctorsFromApi() {
+    if (!State.accessToken && !getStoredAccessToken()) {
+        return [];
+    }
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/doctors`, {
+            headers: authHeaders()
+        });
+        if (!response.ok) {
+            return [];
+        }
+        const payload = await response.json();
+        return Array.isArray(payload.doctors) ? payload.doctors : [];
+    } catch (err) {
+        console.warn('Failed to load doctors from backend:', err);
+        return [];
+    }
+}
+
 async function createHelpRequest(payload) {
-    if (!State.accessToken) {
+    if (!State.accessToken && !getStoredAccessToken()) {
         throw new Error('Missing access token for help request creation.');
     }
 
     const response = await fetch(`${API_BASE_URL}/api/requests`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${State.accessToken}`
-        },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(payload)
     });
 
@@ -363,7 +409,7 @@ function isOAuthCallback() {
     );
 }
 
-function applyProfileToState(user, profile) {
+function applyProfileToState(user, profile, accessToken = null) {
     if (!user) {
         return;
     }
@@ -392,7 +438,7 @@ function applyProfileToState(user, profile) {
     State.email = user.email || metadata.email || null;
     State.fullName = displayName;
     State.avatarUrl = avatarUrl;
-    State.accessToken = safeProfile.access_token || State.accessToken || null;
+    State.accessToken = accessToken || safeProfile.access_token || State.accessToken || null;
     State.role = nextRole;
     State.requiresOnboarding = false;
     State.profile = {
@@ -474,6 +520,8 @@ async function initializeAuthListener() {
             if (!session?.user) return;
             const user  = session.user;
             const token = session.access_token;
+            State.accessToken = token;
+            saveState();
             console.log(`[Auth] ${event} for`, user.email);
 
             // ── TOKEN_REFRESHED / INITIAL_SESSION ─────────────────────────
@@ -489,7 +537,7 @@ async function initializeAuthListener() {
                         });
                         if (res.ok) {
                             const profile = await res.json();
-                            applyProfileToState(user, profile);
+                            applyProfileToState(user, profile, token);
                             app.updateHeader();
                             app.renderUserDashboard(profile);
                         } else if (res.status === 404) {
@@ -528,7 +576,7 @@ async function initializeAuthListener() {
                     if (res.ok) {
                         const profile = await res.json();
                         localStorage.removeItem('staged_onboarding_data');
-                        applyProfileToState(user, profile);
+                        applyProfileToState(user, profile, token);
                         app.updateHeader();
                         app.router(getDashboardForRole(profile.role));
                         return;
@@ -548,7 +596,7 @@ async function initializeAuthListener() {
 
                 if (res.ok) {
                     const profile = await res.json();
-                    applyProfileToState(user, profile);
+                    applyProfileToState(user, profile, token);
                     app.updateHeader();
 
                     if (onDashboardPage) {
@@ -825,10 +873,7 @@ const DOM = {
     <div>
       <label style="color:var(--text-muted);font-size:0.75rem;font-weight:900;text-transform:uppercase;">Select Specialization Directory</label>
       <select id="appt-doctor" class="input-field" style="background:var(--bg-input);" required>
-        <option value="Dr. Ramesh (Cardiologist)">Dr. Ramesh - Cardiologist</option>
-        <option value="Dr. Suresh (Orthopedic)">Dr. Suresh - Orthopedic</option>
-        <option value="Dr. Priya (Neurologist)">Dr. Priya - Neurologist</option>
-        <option value="Dr. Amit (General Physician)">Dr. Amit - General Physician</option>
+        <option value="">Loading registered doctors...</option>
       </select>
     </div>
     <div>
@@ -905,6 +950,10 @@ const DOM = {
     <div>
       <label style="color:var(--text-muted);font-size:0.75rem;font-weight:900;text-transform:uppercase;">Document Title</label>
       <input id="doc-title" class="input-field" placeholder="Document Title (e.g. Prescription May)" required>
+    </div>
+    <div>
+      <label style="color:var(--text-muted);font-size:0.75rem;font-weight:900;text-transform:uppercase;">Select File</label>
+      <input id="doc-file" class="input-field" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">
     </div>
     <div>
       <label style="color:var(--text-muted);font-size:0.75rem;font-weight:900;text-transform:uppercase;">Category</label>
@@ -999,7 +1048,7 @@ const DOM = {
         } else if (role === 'Doctor') {
             dash.innerHTML = `
 <div style="margin-bottom:1.5rem; text-align: left;">
-  <h1 style="font-size:2.5rem;font-weight:900;color:#fff;">Dr. ${profile.full_name || 'Doctor'} — Appointment Agenda</h1>
+  <h1 style="font-size:2.5rem;font-weight:900;color:#fff;">${profile.full_name || 'Doctor'} - Appointment Agenda</h1>
   <p style="color:var(--text-muted);">Medical Practitioner Command Center</p>
 </div>
 <div id="doc-tab-bar" class="nc-tab-bar">
@@ -1103,6 +1152,7 @@ const DOM = {
         if (medForm) medForm.addEventListener('submit', e => app.submitMedicine(e));
         const apptForm = document.getElementById('appt-form');
         if (apptForm) apptForm.addEventListener('submit', e => app.submitAppointment(e));
+        if (document.getElementById('appt-doctor')) app.populateDoctorSelect();
         const contactForm = document.getElementById('contact-form');
         if (contactForm) contactForm.addEventListener('submit', e => app.submitContact(e));
         const healthForm = document.getElementById('health-form');
@@ -1168,8 +1218,12 @@ const DOM = {
             }
             await this.renderSeniorHelpRequests();
             await this._loadVolTasks();
+            await this.refreshLiveDashboardData();
         } catch (err) {
             console.warn('Backend request creation failed:', err);
+            if (fb) {
+                fb.innerHTML = '<span style="color:var(--c-pink); font-weight:700;">Unable to submit request right now.</span>';
+            }
         }
     },
 
@@ -1179,16 +1233,67 @@ const DOM = {
         const requests = (await fetchHelpRequests()).filter(r => (r.senior_id || r.seniorId) === State.userId);
         list.innerHTML = requests.length
             ? requests.map(r => `
-                <div class="glass-panel" style="padding:1rem;margin-bottom:1rem;border-left:4px solid ${r.status === 'Completed' ? 'var(--c-green)' : r.status === 'Assigned' ? 'var(--c-blue)' : 'var(--c-yellow)'};">
+                <div class="glass-panel" style="padding:1rem;margin-bottom:1rem;border-left:4px solid ${r.status === 'Completed' ? 'var(--c-green)' : r.status === 'Accepted' ? 'var(--c-blue)' : 'var(--c-yellow)'};">
                     <div style="display:flex;justify-content:space-between;align-items:center;">
-                        <b style="color:#fff;font-size:1.1rem;">${r.category || r.type}</b>
-                        <span class="badge ${r.status === 'Completed' ? 'badge-green' : r.status === 'Assigned' ? 'badge-blue' : 'badge-yellow'}">${r.status}</span>
+                        <b style="color:#fff;font-size:1.1rem;">${r.title || r.category || r.type}</b>
+                        <span class="badge ${r.status === 'Completed' ? 'badge-green' : r.status === 'Accepted' ? 'badge-blue' : 'badge-yellow'}">${r.status}</span>
                     </div>
                     <p style="color:var(--text-muted);font-size:0.9rem;margin:0.5rem 0;">${r.description || r.desc || ''}</p>
-                    <p style="color:var(--text-muted);font-size:0.75rem;margin:0;">Scheduled: ${new Date(r.created_at || r.ts || Date.now()).toLocaleString()} | Urgency: ${r.priority || r.urgency || 'Normal'}</p>
+                    <p style="color:var(--text-muted);font-size:0.75rem;margin:0;">Scheduled: ${new Date(r.created_at || r.ts || Date.now()).toLocaleString()}</p>
                 </div>
             `).join('')
             : '<p style="color:var(--text-muted);">No help requests submitted yet.</p>';
+    },
+
+    async refreshLiveDashboardData() {
+        if (!State.userId) return;
+
+        const role = normalizeRole(State.role || 'Senior Citizen');
+
+        if (role === 'Senior Citizen') {
+            await Promise.allSettled([
+                this.renderSeniorHelpRequests(),
+                this.renderSOSHistory(),
+                this.renderMedications(),
+                this.renderAppointments(),
+                this.renderContacts(),
+            ]);
+            return;
+        }
+
+        if (role === 'Caretaker') {
+            await Promise.allSettled([
+                this._loadCareSOS(State.profile),
+                this._loadCareMeds(),
+                this._loadLinkedSeniors(State.profile),
+            ]);
+            return;
+        }
+
+        if (role === 'Volunteer') {
+            await Promise.allSettled([
+                this._loadVolTasks(),
+                this._loadVolActiveTasks(),
+                this._loadLeaderboard(),
+            ]);
+            return;
+        }
+
+        if (role === 'Admin') {
+            await Promise.allSettled([
+                this._loadAdminStats(),
+                this._loadAdminUsers(),
+                this._loadAdminVerifications(),
+                this._loadAdminSOS(),
+            ]);
+            return;
+        }
+
+        if (role === 'Doctor') {
+            await Promise.allSettled([
+                this._loadDoctorAppts(State.profile),
+            ]);
+        }
     },
 
     submitCheckIn() {
@@ -1206,6 +1311,7 @@ const DOM = {
                 await this.addNotification(`Daily safety check-in confirmed by Senior Citizen.`, null, 'Caretaker');
                 const statusEl = document.getElementById('checkin-status');
                 if(statusEl) statusEl.classList.remove('hidden');
+                await this.refreshLiveDashboardData();
             } catch (error) {
                 console.error('Failed to submit check-in:', error);
                 alert('Unable to submit check-in right now.');
@@ -1299,7 +1405,7 @@ const DOM = {
     async _loadVolTasks() {
         const grid = document.getElementById('vol-task-grid');
         if (!grid) return;
-        const tasks = (await fetchHelpRequests()).filter(r => r.status === 'Pending');
+        const tasks = (await fetchHelpRequests()).filter(r => normalizeRequestStatus(r.status) === 'pending');
         grid.innerHTML = tasks.length
             ? tasks.map(t => `
                 <div class="glass-panel" style="padding:1.5rem;border-color:var(--c-green);">
@@ -1333,7 +1439,7 @@ const DOM = {
     async _loadVolActiveTasks() {
         const list = document.getElementById('vol-active-list');
         if (!list) return;
-        const active = (await fetchHelpRequests()).filter(r => (r.volunteer_id || r.volunteerId) === State.userId && r.status === 'Assigned');
+        const active = (await fetchHelpRequests()).filter(r => (r.volunteer_id || r.volunteerId) === State.userId && r.status === 'Accepted');
         list.innerHTML = active.length
             ? active.map(t => `
                 <div class="glass-panel" style="padding:1.5rem;margin-bottom:1rem;border-color:var(--c-blue);">
@@ -1342,7 +1448,7 @@ const DOM = {
                         <span class="badge ${t.status === 'Completed' ? 'badge-green' : 'badge-blue'}">${t.status}</span>
                     </div>
                     <p style="color:var(--text-muted);margin:0.5rem 0;">${t.description || t.desc || ''}</p>
-                    ${t.status === 'Assigned' ? `
+                    ${t.status === 'Accepted' ? `
                       <button class="btn btn-primary" style="padding:0.5rem 1rem;font-size:0.85rem;margin-top:0.5rem;" onclick="app._completeVolTask('${t.id}')">Mark As Completed (+20 XP)</button>
                     ` : ''}
                 </div>
@@ -1484,7 +1590,7 @@ const DOM = {
 
     async _loadAdminStats() {
         try {
-            const res = await fetch(`${API_BASE_URL}/api/admin/stats`, { headers: { Authorization: `Bearer ${State.accessToken}` } });
+            const res = await fetch(`${API_BASE_URL}/api/admin/stats`, { headers: authHeaders() });
             if (!res.ok) return;
             const d = await res.json();
             const set = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v ?? '—'; };
@@ -1499,7 +1605,7 @@ const DOM = {
         const el = document.getElementById('admin-user-table');
         if (!el) return;
         try {
-            const res = await fetch(`${API_BASE_URL}/api/admin/users`, { headers: { Authorization: `Bearer ${State.accessToken}` } });
+            const res = await fetch(`${API_BASE_URL}/api/admin/users`, { headers: authHeaders() });
             if (!res.ok) { el.textContent = 'Could not load users.'; return; }
             const { users } = await res.json();
             el.innerHTML = users.map(u => `
@@ -1520,7 +1626,7 @@ const DOM = {
         try {
             await fetch(`${API_BASE_URL}/api/admin/status`, { 
                 method:'PUT', 
-                headers:{'Content-Type':'application/json','Authorization':`Bearer ${State.accessToken}`}, 
+                headers: authHeaders({ 'Content-Type':'application/json' }), 
                 body: JSON.stringify({ uid, status:'Blocked' }) 
             });
             app._loadAdminUsers();
@@ -1541,10 +1647,10 @@ const DOM = {
         const el = document.getElementById('admin-volunteer-verifications');
         if (!el) return;
         try {
-            const res = await fetch(`${API_BASE_URL}/api/admin/users`, { headers: { Authorization: `Bearer ${State.accessToken}` } });
+            const res = await fetch(`${API_BASE_URL}/api/admin/users`, { headers: authHeaders() });
             if (!res.ok) { el.textContent = 'Could not load pending verifications.'; return; }
             const { users } = await res.json();
-            const volunteers = users.filter(u => u.role === 'Volunteer');
+                        const volunteers = users.filter(u => u.role === 'Volunteer' && u.status !== 'Verified');
             el.innerHTML = volunteers.length ? volunteers.map(u => `
 <div class="glass-panel" style="display:flex;justify-content:space-between;align-items:center;padding:1rem;margin-bottom:.75rem;">
   <div>
@@ -1566,7 +1672,7 @@ const DOM = {
         try {
             await fetch(`${API_BASE_URL}/api/admin/status`, { 
                 method:'PUT', 
-                headers:{'Content-Type':'application/json','Authorization':`Bearer ${State.accessToken}`}, 
+                headers: authHeaders({ 'Content-Type':'application/json' }), 
                 body: JSON.stringify({ uid, status:'Verified' }) 
             });
             app._loadAdminVerifications();
@@ -1894,7 +2000,8 @@ const DOM = {
                         // Hydrate in-memory state from the canonical Supabase row
                         applyProfileToState(
                             { id: userId, email, user_metadata: { role: profileRes.role } },
-                            profileRes
+                            profileRes,
+                            token
                         );
                         app.updateHeader();
 
@@ -2063,11 +2170,10 @@ const DOM = {
     async dispatchSOSAlert() {
         console.log("SOS Button clicked. Initiating GPS Handshake...");
         
-        const caretakerPhone = (State.profile && State.profile.caretaker_phone) || '+911234567890';
-        
         const options = {
             enableHighAccuracy: true,
-            timeout: 5000
+            timeout: 15000,
+            maximumAge: 0
         };
 
         const successCallback = async (position) => {
@@ -2076,22 +2182,18 @@ const DOM = {
             console.log(`GPS Acquired: ${latitude}, ${longitude}`);
             
             try {
-                const response = await fetch('http://127.0.0.1:8000/api/sos/trigger', {
+                const response = await fetch(`${API_BASE_URL}/api/sos/trigger`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${State.accessToken}`
-                    },
+                    headers: authHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         latitude: latitude,
-                        longitude: longitude,
-                        caretaker_phone: caretakerPhone
+                        longitude: longitude
                     })
                 });
                 
                 if (response.ok) {
                     console.log("SOS triggered successfully via API.");
-                    alert("Emergency alert sent to caretaker via SMS.");
+                    alert("Emergency alert sent to caretaker via email.");
                 } else {
                     console.error("Failed to trigger SOS:", await response.text());
                 }
@@ -2101,30 +2203,8 @@ const DOM = {
         };
 
         const errorCallback = async (error) => {
-            console.warn("GPS Handshake failed or timed out. Falling back to DB location.", error);
-            alert("Unable to acquire live GPS. Falling back to registered home address to dispatch alert.");
-            
-            try {
-                const fallbackLat = 12.9716; 
-                const fallbackLng = 77.5946;
-                const response = await fetch('http://127.0.0.1:8000/api/sos/trigger', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${State.accessToken}`
-                    },
-                    body: JSON.stringify({
-                        latitude: fallbackLat,
-                        longitude: fallbackLng,
-                        caretaker_phone: caretakerPhone
-                    })
-                });
-                if (response.ok) {
-                    console.log("Fallback SOS triggered successfully via API.");
-                }
-            } catch (err) {
-                console.error("Error triggering fallback SOS API:", err);
-            }
+            console.warn("Live GPS acquisition failed or timed out.", error);
+            alert("Live GPS is required for SOS. Please allow location access and try again.");
         };
 
         if (navigator.geolocation) {
@@ -2168,7 +2248,7 @@ const DOM = {
         const myReqs = liveRequests.filter(r => (r.senior_id || r.seniorId) === State.userId);
 
         DOM.citReqList.innerHTML = myReqs.length ? myReqs.map(req => {
-            let colorClass = req.status === 'Completed' ? 'badge-green' : (req.status === 'Assigned' ? 'badge-blue' : 'badge-yellow');
+            let colorClass = req.status === 'Completed' ? 'badge-green' : (req.status === 'Accepted' ? 'badge-blue' : 'badge-yellow');
             return `
             <div class="glass-panel" style="padding: 1.5rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
                 <div>
@@ -2189,7 +2269,7 @@ const DOM = {
         if(!pendingTasksEl || !activeTasksEl || !pendingCountEl || !activeCountEl) return;
         const liveRequests = await fetchHelpRequests();
         const pending = liveRequests.filter(r => r.status === 'Pending');
-        const active = liveRequests.filter(r => r.status === 'Assigned');
+        const active = liveRequests.filter(r => r.status === 'Accepted');
 
         pendingCountEl.innerText = pending.length;
         activeCountEl.innerText = active.length;
@@ -2208,7 +2288,7 @@ const DOM = {
                 <button class="btn-task-action" style="flex:1;" onclick="app.volAccept('${req.id}')">Accept Mission</button>
                 <button class="btn-task-action border-pink text-pink" style="flex:1; border-color:var(--c-pink); color:var(--c-pink); background:rgba(255,0,122,0.1);" onclick="app.volReject('${req.id}')">Reject</button>
              </div>` :
-            `<div class="task-status-route"> Active Assigned Route</div>
+            `<div class="task-status-route"> Active Accepted Route</div>
              <button class="btn-task-action btn-task-complete" onclick="app.volComplete('${req.id}')">Mark Completed</button>`;
 
         return `
@@ -2231,21 +2311,21 @@ const DOM = {
     volAccept(id) {
         fetch(`${API_BASE_URL}/api/requests/${id}/claim`, {
             method: 'PUT',
-            headers: { 'Authorization': `Bearer ${State.accessToken}` }
+            headers: authHeaders()
         }).then(() => this.renderVolunteerTasks()).catch(err => console.warn('Failed to claim request:', err));
     },
 
     volReject(id) {
         fetch(`${API_BASE_URL}/api/requests/${id}/reject`, {
             method: 'PUT',
-            headers: { 'Authorization': `Bearer ${State.accessToken}` }
+            headers: authHeaders()
         }).then(() => this.renderVolunteerTasks()).catch(err => console.warn('Failed to reject request:', err));
     },
     
     volComplete(id) {
         fetch(`${API_BASE_URL}/api/requests/${id}/complete`, {
             method: 'PUT',
-            headers: { 'Authorization': `Bearer ${State.accessToken}` }
+            headers: authHeaders()
         }).then(() => this.renderVolunteerTasks()).catch(err => console.warn('Failed to complete request:', err));
     },
 
@@ -2390,13 +2470,17 @@ const DOM = {
     },
     async addNotification(message, forUser = null, forRole = null) {
         try {
+            const linkedCaretakerId = forRole === 'Caretaker' ? State.profile?.linked_caretaker_id || null : null;
+            const userId = forUser || linkedCaretakerId;
+            const roleTarget = userId ? null : forRole;
+
             const response = await fetch(`${API_BASE_URL}/api/notifications`, {
                 method: 'POST',
                 headers: authHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({
                     message,
-                    user_id: forUser,
-                    role_target: forRole
+                    user_id: userId,
+                    role_target: roleTarget
                 })
             });
             if (!response.ok) {
@@ -2479,6 +2563,7 @@ const DOM = {
             }
 
             if(changed) persistLocalCache(db);
+            this.refreshLiveDashboardData();
         }, 10000); // check every 10s
     },
     async submitMedicine(e) {
@@ -2575,10 +2660,25 @@ const DOM = {
     // ==========================================
     // SPRINT-2: APPOINTMENTS
     // ==========================================
+    async populateDoctorSelect() {
+        const sel = document.getElementById('appt-doctor');
+        if (!sel) return;
+
+        const doctors = await fetchDoctorsFromApi();
+        sel.innerHTML = doctors.length
+            ? doctors.map(doc => `<option value="${doc.id}">${doc.full_name}</option>`).join('')
+            : '<option value="">No registered doctors available</option>';
+    },
+
     async submitAppointment(e) {
         e.preventDefault();
         const sel = document.getElementById('appt-doctor');
+        if (!sel.value) {
+            alert('No registered doctor is available for booking yet.');
+            return;
+        }
         const docName = sel.options[sel.selectedIndex].text;
+        const doctorId = sel.value;
         const date = document.getElementById('appt-date').value;
         const time = document.getElementById('appt-time').value;
 
@@ -2588,6 +2688,7 @@ const DOM = {
                 headers: authHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({
                     doctor: docName,
+                    doctor_id: doctorId,
                     date,
                     time
                 })
@@ -2818,7 +2919,9 @@ const DOM = {
     // ==========================================
     async submitDocument(e) {
         e.preventDefault();
-        const title = document.getElementById('doc-title').value;
+        const file = document.getElementById('doc-file')?.files?.[0];
+        const titleInput = document.getElementById('doc-title');
+        const title = titleInput.value || file?.name || 'Medical Document';
         const cat = document.getElementById('doc-cat').value;
 
         try {
@@ -2835,6 +2938,9 @@ const DOM = {
                 throw new Error(`Document upload failed: ${response.status}`);
             }
 
+            if (file) {
+                sessionStorage.setItem(`nammaCareDocumentFile:${title}`, file.name);
+            }
             if(e.target) e.target.reset();
             await this.renderDocuments();
             if(document.getElementById('help-success-alert')) {
@@ -2893,7 +2999,7 @@ const DOM = {
             const users = data.users || [];
             
             const volsEl = document.getElementById('stat-vols');
-            if (volsEl) volsEl.innerText = users.filter(u => u.role === 'Volunteer').length;
+                if (volsEl) volsEl.innerText = users.filter(u => u.role === 'Volunteer' && u.status === 'Verified').length;
 
             const list = document.getElementById('admin-users-list');
             if (list) {
@@ -2904,7 +3010,7 @@ const DOM = {
                         <p class="text-muted text-sm" style="margin-top:0.25rem; margin-bottom:0;">Status: ${u.status} | Phone: ${u.phone || 'N/A'}</p>
                     </div>
                     <div style="display: flex; gap: 0.5rem;">
-                        ${u.status === 'Pending' ? `<button class="btn btn-primary" style="padding:0.4rem 0.8rem; font-size:0.8rem;" onclick="app.adminUpdateUser('${u.id}', '${u.role}', 'Active')">Approve</button>` : ''}
+                        ${u.status === 'Pending' ? `<button class="btn btn-primary" style="padding:0.4rem 0.8rem; font-size:0.8rem;" onclick="app.adminUpdateUser('${u.id}', '${u.role}', '${u.role === 'Volunteer' ? 'Verified' : 'Active'}')">Approve</button>` : ''}
                         ${u.status !== 'Blocked' ? `<button class="btn btn-outline border-pink text-pink" style="padding:0.4rem 0.8rem; font-size:0.8rem; border-color:var(--c-pink); color:var(--c-pink); background:transparent;" onclick="app._adminBlock('${u.id}')">Block</button>` : ''}
                     </div>
                 </div>
@@ -2917,14 +3023,14 @@ const DOM = {
                 if(window.analyticsChartInstance) window.analyticsChartInstance.destroy();
                 
                 const requests = await fetchHelpRequests();
-                const pending = requests.filter(r => r.status === 'Pending').length;
-                const assigned = requests.filter(r => r.status === 'Assigned').length;
-                const completed = requests.filter(r => r.status === 'Completed').length;
+                const pending = requests.filter(r => normalizeRequestStatus(r.status) === 'pending').length;
+                const assigned = requests.filter(r => normalizeRequestStatus(r.status) === 'accepted').length;
+                const completed = requests.filter(r => normalizeRequestStatus(r.status) === 'completed').length;
                 
                 window.analyticsChartInstance = new Chart(chartCanvas, {
                     type: 'doughnut',
                     data: {
-                        labels: ['Pending', 'Assigned', 'Completed'],
+                        labels: ['Pending', 'Accepted', 'Completed'],
                         datasets: [{
                             data: [pending, assigned, completed],
                             backgroundColor: ['#ffcc00', '#00d5ff', '#00ffaa'],
@@ -2941,12 +3047,16 @@ const DOM = {
     },
     async adminUpdateUser(uid, role, status) {
         try {
-            await fetch(`${API_BASE_URL}/api/admin/status`, {
+            const response = await fetch(`${API_BASE_URL}/api/admin/status`, {
                 method: 'PUT',
                 headers: authHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({ uid, role, status })
             });
-            this.renderAdmin();
+            if (!response.ok) {
+                throw new Error(`Admin status update failed: ${response.status}`);
+            }
+            await this.renderAdmin();
+            await this._loadAdminVerifications();
         } catch(e) {
             console.error(e);
             alert("Failed to update status.");
@@ -2980,5 +3090,3 @@ document.addEventListener('DOMContentLoaded', async () => {
         sosButton.addEventListener('click', app.dispatchSOSAlert.bind(app));
     }
 });
-
-
